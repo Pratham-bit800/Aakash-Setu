@@ -763,3 +763,99 @@ class TestStopReasonDistinction:
         print(f"\n  dt progression with rf={rf}: "
               + "  ".join(f"L{k}={e['dt_seconds']:.3g}s" for k, e in enumerate(log)))
 
+
+
+class TestRefinedTcaScientificCorrectness:
+    """
+    Test 6: Scientific correctness of refined TCA kinematics and stopping behavior.
+
+    Essential tests verifying:
+      1. Relative velocity is recalculated at refined TCA rather than reusing Phase-3 estimate,
+         and is consistently used in spatial resolution calculations.
+      2. Stopping logic cleanly distinguishes numerical grid resolution from tolerance convergence,
+         with explicit disclaimer distinguishing numerical resolution from physical prediction accuracy.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        recs = [_iss_rec(60, "SCI-A", ma_deg=0.0), _iss_rec(61, "SCI-B", ma_deg=0.1)]
+        p3_cfg = ScreeningConfig(horizon_minutes=170, coarse_step_minutes=0.5,
+                                 screening_threshold_km=15.0, broad_phase_margin_km=200.0,
+                                 refinement_steps=30)
+        p3_run = screen_satellites(recs, SCREENING_DT, p3_cfg)
+        if not p3_run.alerts:
+            pytest.skip("No Phase-3 alerts for scientific correctness test")
+        self.alert = p3_run.alerts[0]
+        self.recs  = recs
+
+    def test_refined_tca_velocity_recalculated_and_used_consistently(self):
+        """
+        Verify that relative velocity is recalculated at refined TCA (not blindly
+        copied from Phase 3), and spatial resolution is consistently computed
+        as dt * v_rel * 1000 using that refined relative velocity.
+        """
+        cfg = GridConfig(
+            target_spatial_resolution_m=1.0,
+            search_half_window_minutes=1.0,
+            initial_grid_points=10,
+            refinement_factor=5,
+            max_iterations=5,
+        )
+        result = analyse_encounter(self.alert, self.recs, SCREENING_DT, cfg)
+
+        satrec_a, _ = _make_satrec_from_record(self.recs[0])
+        satrec_b, _ = _make_satrec_from_record(self.recs[1])
+
+        # 1. Independently compute relative velocity at refined_tca_minutes
+        jd0, jdf0 = _epoch_to_jd(EPOCH_STR)
+        jd_t, jdf_t = _jd_add_minutes(jd0, jdf0, result.refined_tca_minutes)
+        _, v_a = _propagate_teme(satrec_a, jd_t, jdf_t)
+        _, v_b = _propagate_teme(satrec_b, jd_t, jdf_t)
+        expected_vrel = _vec_norm(_vec_sub(v_a, v_b))
+
+        # Must match recalculated relative speed at refined TCA
+        assert abs(result.relative_speed_km_s - expected_vrel) < 1e-5, (
+            f"Result relative speed ({result.relative_speed_km_s:.6f}) must match "
+            f"propagation at refined TCA ({expected_vrel:.6f})"
+        )
+
+        # 2. Verify spatial resolution is consistently computed with refined v_rel
+        expected_spatial_res = result.final_dt_seconds * result.relative_speed_km_s * 1000.0
+        assert abs(result.spatial_resolution_m - expected_spatial_res) < 1e-4, (
+            f"spatial_resolution_m ({result.spatial_resolution_m:.6f}) must strictly equal "
+            f"final_dt_s * v_rel * 1000 ({expected_spatial_res:.6f})"
+        )
+
+        # 3. Direct refine_tca test: verify it returns refined_rv as 10th value
+        refine_out = refine_tca(
+            satrec_a, satrec_b,
+            jd0, jdf0, self.alert.tca_minutes_from_start,
+            self.alert.relative_speed_km_s, cfg
+        )
+        assert len(refine_out) == 10, "refine_tca must return 10-element tuple including refined_rv"
+        assert abs(refine_out[9] - expected_vrel) < 1e-5
+
+    def test_stopping_behavior_and_numerical_resolution_distinction(self):
+        """
+        Verify that stopping behavior distinguishes numerical grid resolution from
+        tolerance convergence, and that accuracy disclaimer separates numerical
+        grid resolution from physical prediction accuracy.
+        """
+        # Run with tolerance enabled on flat range function
+        cfg_tol = GridConfig(
+            target_spatial_resolution_m=0.01,  # 1 cm requested
+            convergence_tolerance_km=1e-9,
+            max_iterations=10,
+        )
+        result_tol = analyse_encounter(self.alert, self.recs, SCREENING_DT, cfg_tol)
+
+        # Flat range function triggers STOP_TOLERANCE
+        assert result_tol.stop_reason == STOP_TOLERANCE
+        # Crucial distinction: converged=False because requested spatial target was not met
+        assert result_tol.converged is False
+        assert result_tol.spatial_resolution_m > cfg_tol.target_spatial_resolution_m
+
+        # Verify numerical grid resolution is clearly distinguished from prediction accuracy
+        assert "NUMERICAL" in result_tol.accuracy_disclaimer
+        assert "NOT a measure of physical prediction accuracy" in result_tol.accuracy_disclaimer
+        assert "1-cm grid resolution does not imply 1-cm positional knowledge" in result_tol.accuracy_disclaimer

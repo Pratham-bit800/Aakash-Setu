@@ -213,7 +213,8 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
     Returns
     -------
     (refined_t_min, refined_sep_km, final_dt_s, spatial_res_m,
-     iterations, converged, stop_reason, convergence_reason, iteration_log)
+     iterations, converged, stop_reason, convergence_reason, iteration_log,
+     refined_relative_speed_km_s)
     """
     if config is None:
         config = GridConfig()
@@ -222,7 +223,7 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
     rf = max(config.refinement_factor, 2)
     rel_speed_safe = max(relative_speed_km_s, 1e-9)
 
-    # Eq 2: target dt for desired spatial resolution
+    # Eq 2: initial target dt for desired spatial resolution based on coarse speed
     target_dt_s   = config.target_spatial_resolution_m / (rel_speed_safe * 1000.0)
     target_dt_min  = target_dt_s / 60.0
 
@@ -233,7 +234,7 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
     best_t   = center
     best_sep = float("inf")
     prev_sep = float("inf")
-    best_rv  = relative_speed_km_s
+    best_rv  = rel_speed_safe
 
     stop_reason        = STOP_MAX_ITER
     convergence_reason = "max_iterations reached without meeting any stopping criterion"
@@ -247,32 +248,35 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
         current_dt_min = dt_used
         iterations = it + 1
 
+        if sep_new < best_sep:
+            best_sep = sep_new
+            best_t   = t_new
+            if math.isfinite(rv_new) and rv_new > 0.0:
+                best_rv = rv_new
+
+        achieved_dt_s  = current_dt_min * 60.0
+        # Spatial resolution at current best TCA estimate using refined relative speed
+        current_spatial_res_m = achieved_dt_s * best_rv * 1000.0
+
         if config.include_iteration_log:
             iteration_log.append({
                 "iteration": it,
                 "center_min":        round(center, 10),
                 "half_window_min":   round(hw, 10),
                 "dt_seconds":        round(dt_used * 60.0, 12),
-                "spatial_resolution_m": round(dt_used * 60.0 * rel_speed_safe * 1000.0, 8),
-                "best_sep_km":       round(sep_new, 10),
+                "spatial_resolution_m": round(current_spatial_res_m, 8),
+                "best_sep_km":       round(best_sep, 10),
+                "best_rv_km_s":      round(best_rv, 8),
                 "n_points":          n,
             })
 
-        if sep_new < best_sep:
-            best_sep = sep_new
-            best_t   = t_new
-            if math.isfinite(rv_new):
-                best_rv = rv_new
-
         # ---- Stopping criterion (a): spatial resolution achieved ----
-        achieved_dt_s  = current_dt_min * 60.0
-        spatial_res_m  = achieved_dt_s * rel_speed_safe * 1000.0
         if (math.isfinite(config.target_spatial_resolution_m)
-                and spatial_res_m <= config.target_spatial_resolution_m):
+                and current_spatial_res_m <= config.target_spatial_resolution_m):
             stop_reason = STOP_RESOLUTION
             convergence_reason = (
                 f"RESOLUTION_ACHIEVED: target {config.target_spatial_resolution_m:.4g} m "
-                f"met (sigma_spatial = {spatial_res_m:.4g} m) after {iterations} iteration(s)"
+                f"met (sigma_spatial = {current_spatial_res_m:.4g} m) after {iterations} iteration(s)"
             )
             break
 
@@ -285,7 +289,7 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
                 f"TOLERANCE_CONVERGENCE: |sep_change| = {sep_change:.3e} km "
                 f"< tol {config.convergence_tolerance_km:.3e} km after {iterations} iteration(s). "
                 f"Target spatial resolution {config.target_spatial_resolution_m:.4g} m "
-                f"was NOT achieved (current {spatial_res_m:.4g} m). "
+                f"was NOT achieved (current {current_spatial_res_m:.4g} m). "
                 "Range function is numerically flat at this scale; further refinement "
                 "is limited by double-float arithmetic or SGP4 internal precision."
             )
@@ -307,12 +311,25 @@ def refine_tca(satrec_a, satrec_b, jd0, jdf0, phase3_tca_minutes,
         hw     = hw_next
         center = best_t
 
+    # Explicitly recalculate relative velocity at the refined TCA (best_t)
+    refined_rv = best_rv
+    jd_best, jdf_best = _jd_add_minutes(jd0, jdf0, best_t)
+    try:
+        _, v_a_best = _propagate_teme(satrec_a, jd_best, jdf_best)
+        _, v_b_best = _propagate_teme(satrec_b, jd_best, jdf_best)
+        v_diff = _vec_norm(_vec_sub(v_a_best, v_b_best))
+        if math.isfinite(v_diff) and v_diff > 0.0:
+            refined_rv = v_diff
+    except RuntimeError:
+        pass
+
     final_dt_s    = current_dt_min * 60.0
-    spatial_res_m = final_dt_s * rel_speed_safe * 1000.0
+    spatial_res_m = final_dt_s * refined_rv * 1000.0
     converged     = (stop_reason == STOP_RESOLUTION)
 
     return (best_t, best_sep, final_dt_s, spatial_res_m,
-            iterations, converged, stop_reason, convergence_reason, iteration_log)
+            iterations, converged, stop_reason, convergence_reason, iteration_log,
+            refined_rv)
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +390,7 @@ def analyse_encounter(phase3_result, satellite_records, screening_dt, grid_confi
     tca_min   = phase3_result.tca_minutes_from_start
 
     (refined_t, refined_sep, final_dt_s, spatial_res_m,
-     iters, converged, stop_reason, convergence_reason, iter_log) = refine_tca(
+     iters, converged, stop_reason, convergence_reason, iter_log, refined_rv) = refine_tca(
         satrec_a, satrec_b, jd0, jdf0, tca_min, rel_speed, grid_config
     )
 
@@ -396,7 +413,7 @@ def analyse_encounter(phase3_result, satellite_records, screening_dt, grid_confi
         stop_reason=stop_reason,
         converged=converged,
         convergence_reason=convergence_reason,
-        relative_speed_km_s=round(rel_speed, 6),
+        relative_speed_km_s=round(refined_rv, 6),
         tca_delta_seconds=round((refined_t - tca_min) * 60.0, 6),
         miss_distance_improvement_m=round((phase3_result.miss_distance_km - refined_sep) * 1000.0, 6),
         phase3_stale_warning=(phase3_result.object_1_stale or phase3_result.object_2_stale),
