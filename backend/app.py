@@ -608,6 +608,206 @@ def screen_results():
         "config":                   run.config,
         "disclaimer":               run.disclaimer,
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Grid-Based Collision Analysis Endpoints
+# ---------------------------------------------------------------------------
+from grid_analysis import GridConfig, analyse_encounter, analyse_all_alerts
+import dataclasses
+
+
+def _serialise_grid_result(r):
+    """Convert GridAnalysisResult to a JSON-serialisable dict."""
+    d = dataclasses.asdict(r)
+    for k, v in list(d.items()):
+        if isinstance(v, float) and (v != v):   # NaN -> None
+            d[k] = None
+    return d
+
+
+@app.route("/api/analyse")
+def analyse():
+    """
+    Run Phase-3 screening then apply grid-based TCA refinement to all alerts.
+
+    Query parameters (Phase-3 screening):
+      norad_ids             : comma-separated NORAD IDs (default: all stations + 200 active)
+      limit                 : int, max satellites (default 222)
+      horizon_minutes       : float (default 180)
+      coarse_step_minutes   : float (default 1.0)
+      threshold_km          : float (default 5.0)
+      broad_phase_margin_km : float (default 50.0)
+
+    Query parameters (Phase-4 grid):
+      grid_half_window_min  : float, search window around TCA (default 2.0)
+      grid_points           : int, grid points per level (default 20)
+      grid_refinement_factor: int, points divisor per level (default 10)
+      target_resolution_m   : float, target spatial resolution in metres (default 0.01)
+      max_grid_iterations   : int (default 12)
+      include_iteration_log : bool, "true"/"false" (default false)
+
+    Returns schema:
+      {
+        "phase3_run_id":   str,
+        "screening_epoch": str,
+        "objects_screened": int,
+        "phase3_alert_count": int,
+        "grid_analyses": [ GridAnalysisResult... ],
+        "runtime_seconds": float,
+        "accuracy_disclaimer": str
+      }
+    """
+    import math as _math
+
+    # --- Phase-3 config ---
+    try:
+        from collision_screening import ScreeningConfig
+        _h   = float(request.args.get("horizon_minutes", 180))
+        _cs  = float(request.args.get("coarse_step_minutes", 1.0))
+        _th  = float(request.args.get("threshold_km", 5.0))
+        _bm  = float(request.args.get("broad_phase_margin_km", 50.0))
+        for nm, v in [("horizon_minutes",_h),("coarse_step_minutes",_cs),
+                      ("threshold_km",_th),("broad_phase_margin_km",_bm)]:
+            if not _math.isfinite(v):
+                raise ValueError(f"{nm}={v} is not finite")
+        p3_cfg = ScreeningConfig(
+            horizon_minutes=_h, coarse_step_minutes=_cs,
+            screening_threshold_km=_th, broad_phase_margin_km=_bm,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Bad Phase-3 config: {exc}"}), 400
+
+    # --- Phase-4 grid config ---
+    try:
+        _hw  = float(request.args.get("grid_half_window_min", 2.0))
+        _gp  = int(request.args.get("grid_points", 20))
+        _rf  = int(request.args.get("grid_refinement_factor", 10))
+        _tr  = float(request.args.get("target_resolution_m", 0.01))
+        _mi  = int(request.args.get("max_grid_iterations", 12))
+        _il  = request.args.get("include_iteration_log", "false").lower() == "true"
+        for nm, v in [("grid_half_window_min",_hw),("target_resolution_m",_tr)]:
+            if not _math.isfinite(v):
+                raise ValueError(f"{nm}={v} is not finite")
+        if _gp < 3:
+            raise ValueError("grid_points must be >= 3")
+        if _rf < 2:
+            raise ValueError("grid_refinement_factor must be >= 2")
+        g4_cfg = GridConfig(
+            search_half_window_minutes=_hw,
+            initial_grid_points=_gp,
+            refinement_factor=_rf,
+            target_spatial_resolution_m=_tr,
+            max_iterations=_mi,
+            include_iteration_log=_il,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Bad Phase-4 grid config: {exc}"}), 400
+
+    # --- Select satellites ---
+    norad_ids_raw = request.args.get("norad_ids")
+    limit = int(request.args.get("limit", 222))
+    if norad_ids_raw:
+        ids = [int(x.strip()) for x in norad_ids_raw.split(",") if x.strip().isdigit()]
+        recs = [SATELLITES[nid] for nid in ids if nid in SATELLITES]
+    else:
+        station_recs = [s for s in SATELLITES.values() if s.get("source") == "stations"]
+        active_recs  = [s for s in SATELLITES.values() if s.get("source") != "stations"]
+        recs = station_recs + active_recs[:max(0, limit - len(station_recs))]
+
+    t_total_start = datetime.now(tz=timezone.utc)
+
+    # --- Phase-3 screening ---
+    dt = t_total_start
+    p3_run = screen_satellites(recs, dt, p3_cfg)
+
+    # --- Phase-4 grid analysis on alerts ---
+    g4_results = analyse_all_alerts(p3_run, recs, dt, g4_cfg, alerts_only=True)
+
+    t_total_s = (datetime.now(tz=timezone.utc) - t_total_start).total_seconds()
+
+    return jsonify({
+        "phase3_run_id":       p3_run.run_id,
+        "screening_epoch":     p3_run.screening_epoch,
+        "objects_screened":    p3_run.objects_screened,
+        "phase3_alert_count":  p3_run.alert_count if hasattr(p3_run, "alert_count") else len([a for a in p3_run.alerts if a.screening_status == "ALERT"]),
+        "grid_analyses":       [_serialise_grid_result(r) for r in g4_results],
+        "runtime_seconds":     round(t_total_s, 3),
+        "accuracy_disclaimer": (
+            "Grid resolution is a numerical property of the algorithm. "
+            "It does NOT represent physical prediction accuracy. "
+            "SGP4 TLE-based position errors typically range from 100 m to >10 km "
+            "depending on TLE age. Results are not suitable for operational use."
+        ),
+    })
+
+
+@app.route("/api/analyse/pair")
+def analyse_pair():
+    """
+    Run Phase-3 screening on exactly two NORAD IDs, then apply grid refinement.
+
+    Required parameters:
+      norad_a, norad_b      : NORAD IDs (integers)
+
+    All Phase-3 and Phase-4 grid parameters from /api/analyse also apply.
+
+    This endpoint is the primary route for controlled test scenarios where
+    exact NORAD IDs are known.
+    """
+    import math as _math
+    from collision_screening import ScreeningConfig
+
+    try:
+        norad_a = int(request.args.get("norad_a", ""))
+        norad_b = int(request.args.get("norad_b", ""))
+    except (TypeError, ValueError):
+        return jsonify({"error": "norad_a and norad_b must be integer NORAD IDs"}), 400
+
+    if norad_a not in SATELLITES or norad_b not in SATELLITES:
+        missing = [n for n in [norad_a, norad_b] if n not in SATELLITES]
+        return jsonify({"error": f"NORAD IDs not found: {missing}"}), 404
+
+    recs = [SATELLITES[norad_a], SATELLITES[norad_b]]
+
+    try:
+        _h  = float(request.args.get("horizon_minutes", 180))
+        _cs = float(request.args.get("coarse_step_minutes", 1.0))
+        _th = float(request.args.get("threshold_km", 5.0))
+        _bm = float(request.args.get("broad_phase_margin_km", 50.0))
+        for nm, v in [("horizon_minutes",_h),("coarse_step_minutes",_cs)]:
+            if not _math.isfinite(v): raise ValueError(f"{nm}={v}")
+        p3_cfg = ScreeningConfig(horizon_minutes=_h, coarse_step_minutes=_cs,
+                                  screening_threshold_km=_th, broad_phase_margin_km=_bm)
+
+        _hw = float(request.args.get("grid_half_window_min", 2.0))
+        _gp = int(request.args.get("grid_points", 20))
+        _tr = float(request.args.get("target_resolution_m", 0.01))
+        _mi = int(request.args.get("max_grid_iterations", 12))
+        _il = request.args.get("include_iteration_log", "false").lower() == "true"
+        g4_cfg = GridConfig(search_half_window_minutes=_hw, initial_grid_points=_gp,
+                             target_spatial_resolution_m=_tr, max_iterations=_mi,
+                             include_iteration_log=_il)
+    except Exception as exc:
+        return jsonify({"error": f"Bad config: {exc}"}), 400
+
+    dt = datetime.now(tz=timezone.utc)
+    p3_run = screen_satellites(recs, dt, p3_cfg)
+    g4_results = analyse_all_alerts(p3_run, recs, dt, g4_cfg, alerts_only=True)
+
+    return jsonify({
+        "phase3_run_id":       p3_run.run_id,
+        "screening_epoch":     p3_run.screening_epoch,
+        "norad_a":             norad_a,
+        "norad_b":             norad_b,
+        "phase3_miss_distance_km": p3_run.alerts[0].miss_distance_km if p3_run.alerts else None,
+        "phase3_tca_minutes":  p3_run.alerts[0].tca_minutes_from_start if p3_run.alerts else None,
+        "grid_analyses":       [_serialise_grid_result(r) for r in g4_results],
+        "accuracy_disclaimer": (
+            "Grid resolution is a numerical property, not a measure of physical accuracy. "
+            "Not suitable for operational collision avoidance."
+        ),
+    })
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
@@ -635,6 +835,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
