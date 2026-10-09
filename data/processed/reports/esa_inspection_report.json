@@ -1,0 +1,1337 @@
+{
+  "generated_at": "2026-10-09T12:23:05.725577+00:00",
+  "audit_version": 2,
+  "file_inventory": {
+    "train_data_csv": {
+      "exists": true,
+      "size_mb": 222.78,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\train_data\\train_data.csv"
+    },
+    "test_data_csv": {
+      "exists": true,
+      "size_mb": 33.67,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\test_data.csv"
+    },
+    "test_data_private_csv": {
+      "exists": true,
+      "size_mb": 2.9,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\test_data_private.csv"
+    },
+    "raw_data_gz": {
+      "exists": true,
+      "size_mb": 112.91,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\raw_data\\raw_data_2015-2019.gz"
+    },
+    "raw_data_txt": {
+      "exists": true,
+      "size_mb": 0.01,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\raw_data\\raw_data_2015-2019.txt"
+    },
+    "train_data_zip": {
+      "exists": true,
+      "size_mb": 83.65,
+      "path": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\train_data.zip"
+    }
+  },
+  "datasets": {
+    "train": {
+      "file": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\train_data\\train_data.csv",
+      "total_rows": 162634,
+      "total_cols": 103,
+      "columns": [
+        "event_id",
+        "time_to_tca",
+        "mission_id",
+        "risk",
+        "max_risk_estimate",
+        "max_risk_scaling",
+        "miss_distance",
+        "relative_speed",
+        "relative_position_r",
+        "relative_position_t",
+        "relative_position_n",
+        "relative_velocity_r",
+        "relative_velocity_t",
+        "relative_velocity_n",
+        "t_time_lastob_start",
+        "t_time_lastob_end",
+        "t_recommended_od_span",
+        "t_actual_od_span",
+        "t_obs_available",
+        "t_obs_used",
+        "t_residuals_accepted",
+        "t_weighted_rms",
+        "t_rcs_estimate",
+        "t_cd_area_over_mass",
+        "t_cr_area_over_mass",
+        "t_sedr",
+        "t_j2k_sma",
+        "t_j2k_ecc",
+        "t_j2k_inc",
+        "t_ct_r",
+        "t_cn_r",
+        "t_cn_t",
+        "t_crdot_r",
+        "t_crdot_t",
+        "t_crdot_n",
+        "t_ctdot_r",
+        "t_ctdot_t",
+        "t_ctdot_n",
+        "t_ctdot_rdot",
+        "t_cndot_r",
+        "t_cndot_t",
+        "t_cndot_n",
+        "t_cndot_rdot",
+        "t_cndot_tdot",
+        "c_object_type",
+        "c_time_lastob_start",
+        "c_time_lastob_end",
+        "c_recommended_od_span",
+        "c_actual_od_span",
+        "c_obs_available",
+        "c_obs_used",
+        "c_residuals_accepted",
+        "c_weighted_rms",
+        "c_rcs_estimate",
+        "c_cd_area_over_mass",
+        "c_cr_area_over_mass",
+        "c_sedr",
+        "c_j2k_sma",
+        "c_j2k_ecc",
+        "c_j2k_inc",
+        "c_ct_r",
+        "c_cn_r",
+        "c_cn_t",
+        "c_crdot_r",
+        "c_crdot_t",
+        "c_crdot_n",
+        "c_ctdot_r",
+        "c_ctdot_t",
+        "c_ctdot_n",
+        "c_ctdot_rdot",
+        "c_cndot_r",
+        "c_cndot_t",
+        "c_cndot_n",
+        "c_cndot_rdot",
+        "c_cndot_tdot",
+        "t_span",
+        "c_span",
+        "t_h_apo",
+        "t_h_per",
+        "c_h_apo",
+        "c_h_per",
+        "geocentric_latitude",
+        "azimuth",
+        "elevation",
+        "mahalanobis_distance",
+        "t_position_covariance_det",
+        "c_position_covariance_det",
+        "t_sigma_r",
+        "c_sigma_r",
+        "t_sigma_t",
+        "c_sigma_t",
+        "t_sigma_n",
+        "c_sigma_n",
+        "t_sigma_rdot",
+        "c_sigma_rdot",
+        "t_sigma_tdot",
+        "c_sigma_tdot",
+        "t_sigma_ndot",
+        "c_sigma_ndot",
+        "F10",
+        "F3M",
+        "SSN",
+        "AP"
+      ],
+      "full_duplicate_rows": 0,
+      "key_duplicate_rows_event_tca": 0,
+      "missing_value_summary": {
+        "t_rcs_estimate": {
+          "count": 3277,
+          "pct": 2.01
+        },
+        "t_crdot_r": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_crdot_t": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_crdot_n": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_ctdot_r": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_ctdot_t": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_ctdot_n": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_ctdot_rdot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_cndot_r": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_cndot_t": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_cndot_n": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_cndot_rdot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "t_cndot_tdot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "c_time_lastob_start": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_time_lastob_end": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_recommended_od_span": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_actual_od_span": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_obs_available": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_obs_used": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_residuals_accepted": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_weighted_rms": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_rcs_estimate": {
+          "count": 52841,
+          "pct": 32.49
+        },
+        "c_ct_r": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_cn_r": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_cn_t": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_crdot_r": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_crdot_t": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_crdot_n": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_ctdot_r": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_ctdot_t": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_ctdot_n": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_ctdot_rdot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_cndot_r": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_cndot_t": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_cndot_n": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_cndot_rdot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_cndot_tdot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "c_sigma_r": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_sigma_t": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "c_sigma_n": {
+          "count": 11,
+          "pct": 0.01
+        },
+        "t_sigma_rdot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "c_sigma_rdot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "t_sigma_tdot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "c_sigma_tdot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "t_sigma_ndot": {
+          "count": 9230,
+          "pct": 5.68
+        },
+        "c_sigma_ndot": {
+          "count": 9241,
+          "pct": 5.68
+        },
+        "F10": {
+          "count": 6822,
+          "pct": 4.19
+        },
+        "F3M": {
+          "count": 6822,
+          "pct": 4.19
+        },
+        "SSN": {
+          "count": 6822,
+          "pct": 4.19
+        },
+        "AP": {
+          "count": 6822,
+          "pct": 4.19
+        }
+      },
+      "fully_missing_columns": [],
+      "event_statistics": {
+        "unique_events": 13154,
+        "cdms_per_event_min": 1,
+        "cdms_per_event_max": 23,
+        "cdms_per_event_mean": 12.36,
+        "cdms_per_event_median": 13.0
+      },
+      "key_feature_statistics": {
+        "time_to_tca": {
+          "count": 162634.0,
+          "mean": 3.35019,
+          "std": 2.013114,
+          "min": -0.149808,
+          "25%": 1.588082,
+          "50%": 3.297624,
+          "75%": 5.083665,
+          "max": 6.993832
+        },
+        "miss_distance": {
+          "count": 162634.0,
+          "mean": 16531.662088,
+          "std": 14269.027951,
+          "min": 9.0,
+          "25%": 4683.0,
+          "50%": 12439.0,
+          "75%": 25281.0,
+          "max": 67373.0
+        },
+        "relative_speed": {
+          "count": 162634.0,
+          "mean": 10655.819638,
+          "std": 4340.23572,
+          "min": 4.0,
+          "25%": 7421.0,
+          "50%": 12262.0,
+          "75%": 14488.0,
+          "max": 17138.0
+        },
+        "risk": {
+          "count": 162634.0,
+          "mean": -19.340603,
+          "std": 10.011641,
+          "min": -30.0,
+          "25%": -30.0,
+          "50%": -17.870632,
+          "75%": -9.173294,
+          "max": -1.442854
+        },
+        "mahalanobis_distance": {
+          "count": 162634.0,
+          "mean": 192.602768,
+          "std": 433.680754,
+          "min": 0.0,
+          "25%": 22.405589,
+          "50%": 71.169594,
+          "75%": 198.476651,
+          "max": 15427.160794
+        }
+      },
+      "risk_distribution": {
+        "target_column": "risk",
+        "min": -30.0,
+        "max": -1.442854,
+        "mean": -19.340603,
+        "std": 10.011641,
+        "floor_value": -30.0,
+        "clamped_at_floor_count": 67240,
+        "clamped_at_floor_pct": 41.34,
+        "high_risk_count_ge_neg6": 10183,
+        "high_risk_pct_ge_neg6": 6.2613
+      },
+      "negative_time_to_tca": {
+        "count": 391,
+        "unique_events": 391,
+        "tca_min": -0.149808,
+        "tca_max": -1.8e-05,
+        "interpretation": "Negative time_to_tca means the CDM was issued AFTER TCA (post-close-approach observation). All 391 negative-tca rows are the minimum-tca (last) CDM of their event, and 11 events have only negative-tca CDMs. These are valid data points -- CDMs can be issued slightly after TCA due to processing latency. Do NOT automatically discard them.",
+        "all_are_last_cdm": true,
+        "events_with_only_negative_tca": 11
+      },
+      "object_type_distribution": {
+        "DEBRIS": 94470,
+        "UNKNOWN": 50542,
+        "PAYLOAD": 15498,
+        "ROCKET BODY": 1947,
+        "TBA": 177
+      },
+      "leakage_columns_present": [
+        "risk",
+        "max_risk_estimate",
+        "max_risk_scaling"
+      ],
+      "temporal_leakage_note": "Each event is a time series of CDMs. The last CDM (min time_to_tca per event) carries the final risk which is the prediction target. Feature rows are all CDMs EXCEPT the last CDM of each event. event_final_risk is the label column -- it must be excluded from X when training.",
+      "esa_norad_note": "ESA event_id and mission_id are anonymized. They do NOT correspond to CelesTrak NORAD_CAT_IDs."
+    },
+    "test": {
+      "file": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\test_data.csv",
+      "total_rows": 24484,
+      "total_cols": 103,
+      "columns": [
+        "event_id",
+        "time_to_tca",
+        "mission_id",
+        "risk",
+        "max_risk_estimate",
+        "max_risk_scaling",
+        "miss_distance",
+        "relative_speed",
+        "relative_position_r",
+        "relative_position_t",
+        "relative_position_n",
+        "relative_velocity_r",
+        "relative_velocity_t",
+        "relative_velocity_n",
+        "t_time_lastob_start",
+        "t_time_lastob_end",
+        "t_recommended_od_span",
+        "t_actual_od_span",
+        "t_obs_available",
+        "t_obs_used",
+        "t_residuals_accepted",
+        "t_weighted_rms",
+        "t_rcs_estimate",
+        "t_cd_area_over_mass",
+        "t_cr_area_over_mass",
+        "t_sedr",
+        "t_j2k_sma",
+        "t_j2k_ecc",
+        "t_j2k_inc",
+        "t_ct_r",
+        "t_cn_r",
+        "t_cn_t",
+        "t_crdot_r",
+        "t_crdot_t",
+        "t_crdot_n",
+        "t_ctdot_r",
+        "t_ctdot_t",
+        "t_ctdot_n",
+        "t_ctdot_rdot",
+        "t_cndot_r",
+        "t_cndot_t",
+        "t_cndot_n",
+        "t_cndot_rdot",
+        "t_cndot_tdot",
+        "c_object_type",
+        "c_time_lastob_start",
+        "c_time_lastob_end",
+        "c_recommended_od_span",
+        "c_actual_od_span",
+        "c_obs_available",
+        "c_obs_used",
+        "c_residuals_accepted",
+        "c_weighted_rms",
+        "c_rcs_estimate",
+        "c_cd_area_over_mass",
+        "c_cr_area_over_mass",
+        "c_sedr",
+        "c_j2k_sma",
+        "c_j2k_ecc",
+        "c_j2k_inc",
+        "c_ct_r",
+        "c_cn_r",
+        "c_cn_t",
+        "c_crdot_r",
+        "c_crdot_t",
+        "c_crdot_n",
+        "c_ctdot_r",
+        "c_ctdot_t",
+        "c_ctdot_n",
+        "c_ctdot_rdot",
+        "c_cndot_r",
+        "c_cndot_t",
+        "c_cndot_n",
+        "c_cndot_rdot",
+        "c_cndot_tdot",
+        "t_span",
+        "c_span",
+        "t_h_apo",
+        "t_h_per",
+        "c_h_apo",
+        "c_h_per",
+        "geocentric_latitude",
+        "azimuth",
+        "elevation",
+        "mahalanobis_distance",
+        "t_position_covariance_det",
+        "c_position_covariance_det",
+        "t_sigma_r",
+        "c_sigma_r",
+        "t_sigma_t",
+        "c_sigma_t",
+        "t_sigma_n",
+        "c_sigma_n",
+        "t_sigma_rdot",
+        "c_sigma_rdot",
+        "t_sigma_tdot",
+        "c_sigma_tdot",
+        "t_sigma_ndot",
+        "c_sigma_ndot",
+        "F10",
+        "F3M",
+        "SSN",
+        "AP"
+      ],
+      "full_duplicate_rows": 0,
+      "key_duplicate_rows_event_tca": 0,
+      "missing_value_summary": {
+        "t_rcs_estimate": {
+          "count": 499,
+          "pct": 2.04
+        },
+        "t_crdot_r": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_crdot_t": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_crdot_n": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_ctdot_r": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_ctdot_t": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_ctdot_n": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_ctdot_rdot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_cndot_r": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_cndot_t": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_cndot_n": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_cndot_rdot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "t_cndot_tdot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "c_time_lastob_start": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_time_lastob_end": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_recommended_od_span": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_actual_od_span": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_obs_available": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_obs_used": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_residuals_accepted": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_weighted_rms": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_rcs_estimate": {
+          "count": 7465,
+          "pct": 30.49
+        },
+        "c_ct_r": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_cn_r": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_cn_t": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_crdot_r": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_crdot_t": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_crdot_n": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_ctdot_r": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_ctdot_t": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_ctdot_n": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_ctdot_rdot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_cndot_r": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_cndot_t": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_cndot_n": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_cndot_rdot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_cndot_tdot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "c_sigma_r": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_sigma_t": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "c_sigma_n": {
+          "count": 6,
+          "pct": 0.02
+        },
+        "t_sigma_rdot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "c_sigma_rdot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "t_sigma_tdot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "c_sigma_tdot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "t_sigma_ndot": {
+          "count": 1217,
+          "pct": 4.97
+        },
+        "c_sigma_ndot": {
+          "count": 1223,
+          "pct": 5.0
+        },
+        "F10": {
+          "count": 1329,
+          "pct": 5.43
+        },
+        "F3M": {
+          "count": 1329,
+          "pct": 5.43
+        },
+        "SSN": {
+          "count": 1329,
+          "pct": 5.43
+        },
+        "AP": {
+          "count": 1329,
+          "pct": 5.43
+        }
+      },
+      "fully_missing_columns": [],
+      "event_statistics": {
+        "unique_events": 2167,
+        "cdms_per_event_min": 1,
+        "cdms_per_event_max": 17,
+        "cdms_per_event_mean": 11.3,
+        "cdms_per_event_median": 14.0
+      },
+      "key_feature_statistics": {
+        "time_to_tca": {
+          "count": 24484.0,
+          "mean": 4.332108,
+          "std": 1.428709,
+          "min": 2.000213,
+          "25%": 3.078928,
+          "50%": 4.263231,
+          "75%": 5.557096,
+          "max": 6.993169
+        },
+        "miss_distance": {
+          "count": 24484.0,
+          "mean": 14585.168641,
+          "std": 13553.992349,
+          "min": 17.0,
+          "25%": 3737.0,
+          "50%": 10179.5,
+          "75%": 22158.75,
+          "max": 65927.0
+        },
+        "relative_speed": {
+          "count": 24484.0,
+          "mean": 10837.462506,
+          "std": 4335.096825,
+          "min": 58.0,
+          "25%": 7673.0,
+          "50%": 12566.0,
+          "75%": 14562.0,
+          "max": 16956.0
+        },
+        "risk": {
+          "count": 24484.0,
+          "mean": -16.548473,
+          "std": 9.846826,
+          "min": -30.0,
+          "25%": -30.0,
+          "50%": -13.550059,
+          "75%": -7.417824,
+          "max": -1.532984
+        },
+        "mahalanobis_distance": {
+          "count": 24484.0,
+          "mean": 114.747545,
+          "std": 254.317653,
+          "min": 1e-06,
+          "25%": 16.530478,
+          "50%": 51.109968,
+          "75%": 131.529539,
+          "max": 19076.920671
+        }
+      },
+      "risk_distribution": {
+        "target_column": "risk",
+        "min": -30.0,
+        "max": -1.532984,
+        "mean": -16.548473,
+        "std": 9.846826,
+        "floor_value": -30.0,
+        "clamped_at_floor_count": 6884,
+        "clamped_at_floor_pct": 28.12,
+        "high_risk_count_ge_neg6": 3263,
+        "high_risk_pct_ge_neg6": 13.3271
+      },
+      "negative_time_to_tca": {
+        "count": 0,
+        "unique_events": 0,
+        "tca_min": null,
+        "tca_max": null,
+        "interpretation": "Negative time_to_tca means the CDM was issued AFTER TCA (post-close-approach observation). All 391 negative-tca rows are the minimum-tca (last) CDM of their event, and 11 events have only negative-tca CDMs. These are valid data points -- CDMs can be issued slightly after TCA due to processing latency. Do NOT automatically discard them."
+      },
+      "object_type_distribution": {
+        "DEBRIS": 14942,
+        "UNKNOWN": 7112,
+        "PAYLOAD": 2090,
+        "ROCKET BODY": 311,
+        "TBA": 29
+      },
+      "leakage_columns_present": [
+        "risk",
+        "max_risk_estimate",
+        "max_risk_scaling"
+      ],
+      "temporal_leakage_note": "Each event is a time series of CDMs. The last CDM (min time_to_tca per event) carries the final risk which is the prediction target. Feature rows are all CDMs EXCEPT the last CDM of each event. event_final_risk is the label column -- it must be excluded from X when training.",
+      "esa_norad_note": "ESA event_id and mission_id are anonymized. They do NOT correspond to CelesTrak NORAD_CAT_IDs."
+    },
+    "test_private": {
+      "file": "data\\raw\\esa\\Collision Avoidance Challenge - Dataset\\kelvins_competition_data\\test_data_private.csv",
+      "total_rows": 2167,
+      "total_cols": 103,
+      "columns": [
+        "event_id",
+        "time_to_tca",
+        "mission_id",
+        "true_risk",
+        "max_risk_estimate",
+        "max_risk_scaling",
+        "miss_distance",
+        "relative_speed",
+        "relative_position_r",
+        "relative_position_t",
+        "relative_position_n",
+        "relative_velocity_r",
+        "relative_velocity_t",
+        "relative_velocity_n",
+        "t_time_lastob_start",
+        "t_time_lastob_end",
+        "t_recommended_od_span",
+        "t_actual_od_span",
+        "t_obs_available",
+        "t_obs_used",
+        "t_residuals_accepted",
+        "t_weighted_rms",
+        "t_rcs_estimate",
+        "t_cd_area_over_mass",
+        "t_cr_area_over_mass",
+        "t_sedr",
+        "t_j2k_sma",
+        "t_j2k_ecc",
+        "t_j2k_inc",
+        "t_ct_r",
+        "t_cn_r",
+        "t_cn_t",
+        "t_crdot_r",
+        "t_crdot_t",
+        "t_crdot_n",
+        "t_ctdot_r",
+        "t_ctdot_t",
+        "t_ctdot_n",
+        "t_ctdot_rdot",
+        "t_cndot_r",
+        "t_cndot_t",
+        "t_cndot_n",
+        "t_cndot_rdot",
+        "t_cndot_tdot",
+        "c_object_type",
+        "c_time_lastob_start",
+        "c_time_lastob_end",
+        "c_recommended_od_span",
+        "c_actual_od_span",
+        "c_obs_available",
+        "c_obs_used",
+        "c_residuals_accepted",
+        "c_weighted_rms",
+        "c_rcs_estimate",
+        "c_cd_area_over_mass",
+        "c_cr_area_over_mass",
+        "c_sedr",
+        "c_j2k_sma",
+        "c_j2k_ecc",
+        "c_j2k_inc",
+        "c_ct_r",
+        "c_cn_r",
+        "c_cn_t",
+        "c_crdot_r",
+        "c_crdot_t",
+        "c_crdot_n",
+        "c_ctdot_r",
+        "c_ctdot_t",
+        "c_ctdot_n",
+        "c_ctdot_rdot",
+        "c_cndot_r",
+        "c_cndot_t",
+        "c_cndot_n",
+        "c_cndot_rdot",
+        "c_cndot_tdot",
+        "t_span",
+        "c_span",
+        "t_h_apo",
+        "t_h_per",
+        "c_h_apo",
+        "c_h_per",
+        "geocentric_latitude",
+        "azimuth",
+        "elevation",
+        "mahalanobis_distance",
+        "t_position_covariance_det",
+        "c_position_covariance_det",
+        "t_sigma_r",
+        "c_sigma_r",
+        "t_sigma_t",
+        "c_sigma_t",
+        "t_sigma_n",
+        "c_sigma_n",
+        "t_sigma_rdot",
+        "c_sigma_rdot",
+        "t_sigma_tdot",
+        "c_sigma_tdot",
+        "t_sigma_ndot",
+        "c_sigma_ndot",
+        "F10",
+        "F3M",
+        "SSN",
+        "AP"
+      ],
+      "full_duplicate_rows": 0,
+      "key_duplicate_rows_event_tca": 0,
+      "missing_value_summary": {
+        "t_rcs_estimate": {
+          "count": 40,
+          "pct": 1.85
+        },
+        "t_crdot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_crdot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_crdot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_ctdot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_ctdot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_ctdot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_ctdot_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_cndot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_cndot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_cndot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_cndot_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_cndot_tdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_rcs_estimate": {
+          "count": 646,
+          "pct": 29.81
+        },
+        "c_crdot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_crdot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_crdot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_ctdot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_ctdot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_ctdot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_ctdot_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_cndot_r": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_cndot_t": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_cndot_n": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_cndot_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_cndot_tdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_sigma_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_sigma_rdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_sigma_tdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_sigma_tdot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "t_sigma_ndot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "c_sigma_ndot": {
+          "count": 238,
+          "pct": 10.98
+        },
+        "F10": {
+          "count": 105,
+          "pct": 4.85
+        },
+        "F3M": {
+          "count": 105,
+          "pct": 4.85
+        },
+        "SSN": {
+          "count": 105,
+          "pct": 4.85
+        },
+        "AP": {
+          "count": 105,
+          "pct": 4.85
+        }
+      },
+      "fully_missing_columns": [],
+      "event_statistics": {
+        "unique_events": 2167,
+        "cdms_per_event_min": 1,
+        "cdms_per_event_max": 1,
+        "cdms_per_event_mean": 1.0,
+        "cdms_per_event_median": 1.0
+      },
+      "key_feature_statistics": {
+        "time_to_tca": {
+          "count": 2167.0,
+          "mean": 0.198827,
+          "std": 0.173507,
+          "min": -0.06698,
+          "25%": 0.077967,
+          "50%": 0.170928,
+          "75%": 0.265111,
+          "max": 0.9772
+        },
+        "miss_distance": {
+          "count": 2167.0,
+          "mean": 16148.649746,
+          "std": 15007.496055,
+          "min": 12.0,
+          "25%": 3917.5,
+          "50%": 11375.0,
+          "75%": 24985.5,
+          "max": 63131.0
+        },
+        "relative_speed": {
+          "count": 2167.0,
+          "mean": 10554.324873,
+          "std": 4530.847268,
+          "min": 62.0,
+          "25%": 7255.0,
+          "50%": 12328.0,
+          "75%": 14519.0,
+          "max": 16956.0
+        },
+        "true_risk": {
+          "count": 2167.0,
+          "mean": -25.797082,
+          "std": 8.392734,
+          "min": -30.0,
+          "25%": -30.0,
+          "50%": -30.0,
+          "75%": -30.0,
+          "max": -2.128019
+        },
+        "mahalanobis_distance": {
+          "count": 2167.0,
+          "mean": 487.215643,
+          "std": 957.659057,
+          "min": 1e-05,
+          "25%": 56.854079,
+          "50%": 199.732413,
+          "75%": 526.049025,
+          "max": 9519.605892
+        }
+      },
+      "risk_distribution": {
+        "target_column": "true_risk",
+        "min": -30.0,
+        "max": -2.128019,
+        "mean": -25.797082,
+        "std": 8.392734,
+        "floor_value": -30.0,
+        "clamped_at_floor_count": 1673,
+        "clamped_at_floor_pct": 77.2,
+        "high_risk_count_ge_neg6": 150,
+        "high_risk_pct_ge_neg6": 6.922
+      },
+      "negative_time_to_tca": {
+        "count": 97,
+        "unique_events": 97,
+        "tca_min": -0.06698,
+        "tca_max": -0.000153,
+        "interpretation": "Negative time_to_tca means the CDM was issued AFTER TCA (post-close-approach observation). All 391 negative-tca rows are the minimum-tca (last) CDM of their event, and 11 events have only negative-tca CDMs. These are valid data points -- CDMs can be issued slightly after TCA due to processing latency. Do NOT automatically discard them.",
+        "all_are_last_cdm": true,
+        "events_with_only_negative_tca": 97
+      },
+      "object_type_distribution": {
+        "DEBRIS": 1280,
+        "UNKNOWN": 614,
+        "PAYLOAD": 241,
+        "ROCKET BODY": 29,
+        "TBA": 3
+      },
+      "leakage_columns_present": [
+        "true_risk",
+        "max_risk_estimate",
+        "max_risk_scaling"
+      ],
+      "temporal_leakage_note": "Each event is a time series of CDMs. The last CDM (min time_to_tca per event) carries the final risk which is the prediction target. Feature rows are all CDMs EXCEPT the last CDM of each event. event_final_risk is the label column -- it must be excluded from X when training.",
+      "esa_norad_note": "ESA event_id and mission_id are anonymized. They do NOT correspond to CelesTrak NORAD_CAT_IDs."
+    }
+  },
+  "feature_matrix": {
+    "total_cdms": 162634,
+    "feature_cdms": 149480,
+    "target_cdms": 13154,
+    "output_file": "data\\processed\\esa_train_features.parquet",
+    "leakage_columns_dropped": [
+      "risk",
+      "max_risk_estimate",
+      "max_risk_scaling"
+    ],
+    "target_column": "event_final_risk",
+    "group_key_columns": [
+      "event_id",
+      "mission_id"
+    ],
+    "feature_column_count": 98,
+    "feature_columns": [
+      "time_to_tca",
+      "miss_distance",
+      "relative_speed",
+      "relative_position_r",
+      "relative_position_t",
+      "relative_position_n",
+      "relative_velocity_r",
+      "relative_velocity_t",
+      "relative_velocity_n",
+      "t_time_lastob_start",
+      "t_time_lastob_end",
+      "t_recommended_od_span",
+      "t_actual_od_span",
+      "t_obs_available",
+      "t_obs_used",
+      "t_residuals_accepted",
+      "t_weighted_rms",
+      "t_rcs_estimate",
+      "t_cd_area_over_mass",
+      "t_cr_area_over_mass",
+      "t_sedr",
+      "t_j2k_sma",
+      "t_j2k_ecc",
+      "t_j2k_inc",
+      "t_ct_r",
+      "t_cn_r",
+      "t_cn_t",
+      "t_crdot_r",
+      "t_crdot_t",
+      "t_crdot_n",
+      "t_ctdot_r",
+      "t_ctdot_t",
+      "t_ctdot_n",
+      "t_ctdot_rdot",
+      "t_cndot_r",
+      "t_cndot_t",
+      "t_cndot_n",
+      "t_cndot_rdot",
+      "t_cndot_tdot",
+      "c_object_type",
+      "c_time_lastob_start",
+      "c_time_lastob_end",
+      "c_recommended_od_span",
+      "c_actual_od_span",
+      "c_obs_available",
+      "c_obs_used",
+      "c_residuals_accepted",
+      "c_weighted_rms",
+      "c_rcs_estimate",
+      "c_cd_area_over_mass",
+      "c_cr_area_over_mass",
+      "c_sedr",
+      "c_j2k_sma",
+      "c_j2k_ecc",
+      "c_j2k_inc",
+      "c_ct_r",
+      "c_cn_r",
+      "c_cn_t",
+      "c_crdot_r",
+      "c_crdot_t",
+      "c_crdot_n",
+      "c_ctdot_r",
+      "c_ctdot_t",
+      "c_ctdot_n",
+      "c_ctdot_rdot",
+      "c_cndot_r",
+      "c_cndot_t",
+      "c_cndot_n",
+      "c_cndot_rdot",
+      "c_cndot_tdot",
+      "t_span",
+      "c_span",
+      "t_h_apo",
+      "t_h_per",
+      "c_h_apo",
+      "c_h_per",
+      "geocentric_latitude",
+      "azimuth",
+      "elevation",
+      "mahalanobis_distance",
+      "t_position_covariance_det",
+      "c_position_covariance_det",
+      "t_sigma_r",
+      "c_sigma_r",
+      "t_sigma_t",
+      "c_sigma_t",
+      "t_sigma_n",
+      "c_sigma_n",
+      "t_sigma_rdot",
+      "c_sigma_rdot",
+      "t_sigma_tdot",
+      "c_sigma_tdot",
+      "t_sigma_ndot",
+      "c_sigma_ndot",
+      "F10",
+      "F3M",
+      "SSN",
+      "AP"
+    ],
+    "leakage_guarantee": "risk, max_risk_estimate, max_risk_scaling removed. event_final_risk is the target (y). event_id and mission_id are group keys. No future-CDM information in feature rows."
+  },
+  "event_split": {
+    "total_events": 13154,
+    "train_events": 10524,
+    "val_events": 2630,
+    "train_cdms": 130616,
+    "val_cdms": 32018,
+    "event_overlap": 0,
+    "random_seed": 42,
+    "val_fraction": 0.2,
+    "output_file": "data\\processed\\esa_event_split.parquet",
+    "usage": "Load this parquet and join on event_id to assign CDM rows to train/val partitions."
+  }
+}
