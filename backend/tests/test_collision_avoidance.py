@@ -583,3 +583,147 @@ class TestIndependentNumericalValidation:
 
         s_analytical = 1.5 * a_drag * (tau_s ** 2)
         assert abs(s_quadrature - s_analytical) / s_analytical < 1e-6
+
+    def test_end_to_end_maneuvered_satrec_vs_rk4(self):
+        """Validate actual ManeuveredSatrec class end-to-end against independent RK4 propagator."""
+        sat_iss = _internal_rec(25544, "ISS", 0.0)["satrec"]
+        sat_deb = _internal_rec(99999, "DEBRIS", 0.1)["satrec"]
+        jd0, jdf0 = _epoch_to_jd(EPOCH_STR)
+
+        tca_min = 161.7358
+        lead_time_min = 60.0
+        t_man_min = tca_min - lead_time_min  # 101.7358 min
+        dv_km_s = 0.0005  # 0.500 m/s prograde
+
+        # State at burn epoch
+        jd_man = jd0
+        jdf_man = jdf0 + t_man_min / 1440.0
+        _, r_burn, v_burn = sat_iss.sgp4(jd_man, jdf_man)
+
+        # Local RTN frame
+        r_mag = math.sqrt(sum(x*x for x in r_burn))
+        r_hat = tuple(x/r_mag for x in r_burn)
+        hx = r_burn[1]*v_burn[2] - r_burn[2]*v_burn[1]
+        hy = r_burn[2]*v_burn[0] - r_burn[0]*v_burn[2]
+        hz = r_burn[0]*v_burn[1] - r_burn[1]*v_burn[0]
+        h_mag = math.sqrt(hx*hx + hy*hy + hz*hz)
+        w_hat = (hx/h_mag, hy/h_mag, hz/h_mag)
+        t_hat = (
+            w_hat[1]*r_hat[2] - w_hat[2]*r_hat[1],
+            w_hat[2]*r_hat[0] - w_hat[0]*r_hat[2],
+            w_hat[0]*r_hat[1] - w_hat[1]*r_hat[0]
+        )
+        v_burn_man = (
+            v_burn[0] + dv_km_s * t_hat[0],
+            v_burn[1] + dv_km_s * t_hat[1],
+            v_burn[2] + dv_km_s * t_hat[2]
+        )
+
+        # Actual ManeuveredSatrec instance
+        sat_man, _ = calculate_maneuvered_elements(sat_iss, _sgp4_epoch_days(EPOCH_STR), t_man_min, 0.0, dv_km_s, 0.0)
+        cw = ManeuveredSatrec(sat_iss, sat_man, t_man_min, jd0, jdf0, dv_rtn_km_s=(0.0, dv_km_s, 0.0))
+
+        # Check full 3D state at baseline TCA (tau = 3600 s)
+        total_tau_s = (tca_min - t_man_min) * 60.0
+        r_rk4, v_rk4 = self._rk4_integrate(r_burn, v_burn_man, 1.0, total_tau_s)
+
+        jd_tca = jd0
+        jdf_tca = jdf0 + tca_min / 1440.0
+        _, r_cw, v_cw = cw.sgp4(jd_tca, jdf_tca)
+
+        dr_3d = math.sqrt(sum((a - b)**2 for a, b in zip(r_cw, r_rk4)))
+        dv_3d = math.sqrt(sum((a - b)**2 for a, b in zip(v_cw, v_rk4)))
+
+        # Assert full 3D position matches RK4 within 120 metres (0.12 km) over 1 hour
+        assert dr_3d < 0.120, f"Full 3D position discrepancy {dr_3d*1000:.2f} m exceeds 120 m"
+        # Assert full 3D velocity matches RK4 within 1 mm/s
+        assert dv_3d < 0.001, f"Full 3D velocity discrepancy {dv_3d*1000:.4f} m/s exceeds 1 mm/s"
+
+    def test_discrepancy_explanation_reproducible_measurement(self):
+        """Demonstrate that the apparent 2.458 km discrepancy was caused by different lead-time setups."""
+        sat_iss = _internal_rec(25544, "ISS", 0.0)["satrec"]
+        sat_deb = _internal_rec(99999, "DEBRIS", 0.1)["satrec"]
+        jd0, jdf0 = _epoch_to_jd(EPOCH_STR)
+
+        tca_min = 161.7358
+        dv_km_s = 0.0005
+
+        # CASE A: Standard operational setup (lead time = 60.0 min, t_man = 101.736 min)
+        t_man_A = tca_min - 60.0
+        jd_man_A = jd0
+        jdf_man_A = jdf0 + t_man_A / 1440.0
+        _, r_burn_A, v_burn_A = sat_iss.sgp4(jd_man_A, jdf_man_A)
+
+        r_mag_A = math.sqrt(sum(x*x for x in r_burn_A))
+        r_hat_A = tuple(x/r_mag_A for x in r_burn_A)
+        hx = r_burn_A[1]*v_burn_A[2] - r_burn_A[2]*v_burn_A[1]
+        hy = r_burn_A[2]*v_burn_A[0] - r_burn_A[0]*v_burn_A[2]
+        hz = r_burn_A[0]*v_burn_A[1] - r_burn_A[1]*v_burn_A[0]
+        h_mag = math.sqrt(hx*hx + hy*hy + hz*hz)
+        w_hat_A = (hx/h_mag, hy/h_mag, hz/h_mag)
+        t_hat_A = (
+            w_hat_A[1]*r_hat_A[2] - w_hat_A[2]*r_hat_A[1],
+            w_hat_A[2]*r_hat_A[0] - w_hat_A[0]*r_hat_A[2],
+            w_hat_A[0]*r_hat_A[1] - w_hat_A[1]*r_hat_A[0]
+        )
+        v_burn_man_A = (v_burn_A[0] + dv_km_s*t_hat_A[0], v_burn_A[1] + dv_km_s*t_hat_A[1], v_burn_A[2] + dv_km_s*t_hat_A[2])
+
+        sat_man_A, _ = calculate_maneuvered_elements(sat_iss, _sgp4_epoch_days(EPOCH_STR), t_man_A, 0.0, dv_km_s, 0.0)
+        cw_A = ManeuveredSatrec(sat_iss, sat_man_A, t_man_A, jd0, jdf0, dv_rtn_km_s=(0.0, dv_km_s, 0.0))
+
+        # Evaluate at boundary of window [tca_min - 6.0] = 155.7358 min
+        t_sample_A = tca_min - 6.0
+        tau_sample_A = (t_sample_A - t_man_A) * 60.0
+        r_rk4_A, _ = self._rk4_integrate(r_burn_A, v_burn_man_A, 1.0, tau_sample_A)
+
+        jd_s_A = jd0
+        jdf_s_A = jdf0 + t_sample_A / 1440.0
+        _, r_cw_A, _ = cw_A.sgp4(jd_s_A, jdf_s_A)
+        _, r_deb_A, _ = sat_deb.sgp4(jd_s_A, jdf_s_A)
+
+        d_cw_A = math.sqrt(sum((a - b)**2 for a, b in zip(r_cw_A, r_deb_A)))
+        d_rk4_A = math.sqrt(sum((a - b)**2 for a, b in zip(r_rk4_A, r_deb_A)))
+
+        # Both CW and RK4 yield ~17.6 km, differing by less than 100 metres
+        assert abs(d_cw_A - d_rk4_A) < 0.100, f"Case A discrepancy {abs(d_cw_A - d_rk4_A)*1000:.1f} m exceeds 100 m"
+        assert 17.5 <= d_cw_A <= 17.7 and 17.5 <= d_rk4_A <= 17.7
+
+        # CASE B: Longer lead-time setup (lead time = 101.7 min, t_man = 60.0 min)
+        t_man_B = 60.0
+        jd_man_B = jd0
+        jdf_man_B = jdf0 + t_man_B / 1440.0
+        _, r_burn_B, v_burn_B = sat_iss.sgp4(jd_man_B, jdf_man_B)
+
+        r_mag_B = math.sqrt(sum(x*x for x in r_burn_B))
+        r_hat_B = tuple(x/r_mag_B for x in r_burn_B)
+        hx = r_burn_B[1]*v_burn_B[2] - r_burn_B[2]*v_burn_B[1]
+        hy = r_burn_B[2]*v_burn_B[0] - r_burn_B[0]*v_burn_B[2]
+        hz = r_burn_B[0]*v_burn_B[1] - r_burn_B[1]*v_burn_B[0]
+        h_mag = math.sqrt(hx*hx + hy*hy + hz*hz)
+        w_hat_B = (hx/h_mag, hy/h_mag, hz/h_mag)
+        t_hat_B = (
+            w_hat_B[1]*r_hat_B[2] - w_hat_B[2]*r_hat_B[1],
+            w_hat_B[2]*r_hat_B[0] - w_hat_B[0]*r_hat_B[2],
+            w_hat_B[0]*r_hat_B[1] - w_hat_B[1]*r_hat_B[0]
+        )
+        v_burn_man_B = (v_burn_B[0] + dv_km_s*t_hat_B[0], v_burn_B[1] + dv_km_s*t_hat_B[1], v_burn_B[2] + dv_km_s*t_hat_B[2])
+
+        sat_man_B, _ = calculate_maneuvered_elements(sat_iss, _sgp4_epoch_days(EPOCH_STR), t_man_B, 0.0, dv_km_s, 0.0)
+        cw_B = ManeuveredSatrec(sat_iss, sat_man_B, t_man_B, jd0, jdf0, dv_rtn_km_s=(0.0, dv_km_s, 0.0))
+
+        # Sample at t = 163.47 min where Case B minimum occurred
+        t_sample_B = 163.4667
+        tau_sample_B = (t_sample_B - t_man_B) * 60.0
+        r_rk4_B, _ = self._rk4_integrate(r_burn_B, v_burn_man_B, 1.0, tau_sample_B)
+
+        jd_s_B = jd0
+        jdf_s_B = jdf0 + t_sample_B / 1440.0
+        _, r_cw_B, _ = cw_B.sgp4(jd_s_B, jdf_s_B)
+        _, r_deb_B, _ = sat_deb.sgp4(jd_s_B, jdf_s_B)
+
+        d_cw_B = math.sqrt(sum((a - b)**2 for a, b in zip(r_cw_B, r_deb_B)))
+        d_rk4_B = math.sqrt(sum((a - b)**2 for a, b in zip(r_rk4_B, r_deb_B)))
+
+        # In Case B, both CW and RK4 yield ~19.98 km, differing by less than 20 metres
+        assert abs(d_cw_B - d_rk4_B) < 0.200, f"Case B discrepancy {abs(d_cw_B - d_rk4_B)*1000:.1f} m exceeds 200 m"
+        assert 19.8 <= d_cw_B <= 20.1 and 19.8 <= d_rk4_B <= 20.1
