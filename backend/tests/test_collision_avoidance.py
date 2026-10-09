@@ -96,8 +96,17 @@ class TestImpulsiveManeuvers:
             cfg, STRATEGY_RETROGRADE_ALONG_TRACK, 0.5, 60.0
         )
         assert cand.semi_major_axis_change_m < -500.0, "Retrograde burn must decrease sma"
-        assert cand.after_miss_distance_km > cand.before_miss_distance_km
-        assert cand.is_feasible is True
+        assert abs(cand.after_miss_distance_km - cand.before_miss_distance_km) > 1.0, "Must alter miss distance"
+
+        # When threat is behind, retrograde burn advances primary and achieves target clearance
+        recs_behind = [_internal_rec(25544, "ISS", 0.0), _internal_rec(99999, "DEBRIS", -0.1)]
+        p3_run = screen_satellites(recs_behind, SCREENING_DT, ScreeningConfig(horizon_minutes=170, screening_threshold_km=15.0))
+        cand_behind = evaluate_avoidance_candidate(
+            p3_run.alerts[0], recs_behind[0], recs_behind[1], SCREENING_DT,
+            cfg, STRATEGY_RETROGRADE_ALONG_TRACK, 0.5, 60.0
+        )
+        assert cand_behind.after_miss_distance_km > cand_behind.before_miss_distance_km
+        assert cand_behind.is_feasible is True
 
     def test_cross_track_maneuver_generates_out_of_plane_separation(self):
         """Cross-track burn modifies inclination and RAAN without changing semi-major axis."""
@@ -276,3 +285,115 @@ class TestAvoidanceAPIEndpoints:
         res = self.client.get("/api/avoidance/evaluate?norad_a=80&norad_b=81")
         assert res.status_code == 400
 
+
+
+class TestPhase5ScientificCorrectness:
+    """
+    Test 6: Independent scientific validation of Phase 5 astrodynamics.
+
+    Verifies:
+      1. Burn-state position continuity (zero discontinuity at burn epoch, dr < 1 mm).
+      2. Burn-state velocity jump (exact delta-v increment applied, dv == requested).
+      3. Realistic miss distance scale (0.5 m/s burn produces realistic kilometer-scale clearance, not ~8253 km).
+      4. Differential-drag drift factor (validates 1.5 factor vs analytical derivation).
+      5. Mean argument of latitude continuity (eliminates near-circular apsidal singularity).
+    """
+
+    def test_burn_state_position_continuity(self):
+        """Impulsive burn must produce exact zero position discontinuity at burn epoch."""
+        sat = _internal_rec(25544, "ISS", 0.0)["satrec"]
+        jd0, jdf0 = _epoch_to_jd(EPOCH_STR)
+        epoch_days = _sgp4_epoch_days(EPOCH_STR)
+        t_man = 60.0
+
+        sat_man, _ = calculate_maneuvered_elements(sat, epoch_days, t_man, 0.0, 0.0005, 0.0)
+        cw_sat = ManeuveredSatrec(sat, sat_man, t_man, jd0, jdf0, dv_rtn_km_s=(0.0, 0.0005, 0.0))
+
+        jd_burn = jd0
+        jdf_burn = jdf0 + t_man / 1440.0
+        e_orig, r_orig, _ = sat.sgp4(jd_burn, jdf_burn)
+        e_man, r_man, _ = cw_sat.sgp4(jd_burn, jdf_burn)
+
+        assert e_orig == 0 and e_man == 0
+        dr_km = math.sqrt(sum((a - b) ** 2 for a, b in zip(r_orig, r_man)))
+        # Position error must be less than 1 millimetre (1e-6 km)
+        assert dr_km < 1e-6, f"Position discontinuity at burn: {dr_km * 1e6:.4f} mm, expected < 1 mm"
+
+    def test_burn_state_velocity_jump(self):
+        """Impulsive burn must apply exactly the requested delta-v vector at burn epoch."""
+        sat = _internal_rec(25544, "ISS", 0.0)["satrec"]
+        jd0, jdf0 = _epoch_to_jd(EPOCH_STR)
+        epoch_days = _sgp4_epoch_days(EPOCH_STR)
+        t_man = 60.0
+        requested_dv_km_s = 0.0005  # 0.500 m/s along-track
+
+        sat_man, _ = calculate_maneuvered_elements(sat, epoch_days, t_man, 0.0, requested_dv_km_s, 0.0)
+        cw_sat = ManeuveredSatrec(sat, sat_man, t_man, jd0, jdf0, dv_rtn_km_s=(0.0, requested_dv_km_s, 0.0))
+
+        jd_burn = jd0
+        jdf_burn = jdf0 + t_man / 1440.0
+        _, _, v_orig = sat.sgp4(jd_burn, jdf_burn)
+        _, _, v_man = cw_sat.sgp4(jd_burn, jdf_burn)
+
+        dv_actual_km_s = math.sqrt(sum((a - b) ** 2 for a, b in zip(v_man, v_orig)))
+        assert abs(dv_actual_km_s - requested_dv_km_s) < 1e-8, (
+            f"Velocity jump: {dv_actual_km_s * 1000:.6f} m/s, expected {requested_dv_km_s * 1000:.6f} m/s"
+        )
+
+    def test_realistic_miss_distance_scale(self):
+        """A 0.5 m/s burn produces realistic kilometer-scale miss distance, NOT thousands of km."""
+        recs = [_internal_rec(25544, "ISS", 0.0), _internal_rec(99999, "DEBRIS", 0.1)]
+        p3_cfg = ScreeningConfig(horizon_minutes=170, screening_threshold_km=15.0)
+        p3_run = screen_satellites(recs, SCREENING_DT, p3_cfg)
+        alert = p3_run.alerts[0]
+
+        cfg = AvoidanceConfig(delta_v_m_s=0.5, target_clearance_km=15.0)
+        cand = evaluate_avoidance_candidate(
+            alert, recs[0], recs[1], SCREENING_DT,
+            cfg, STRATEGY_PROGRADE_ALONG_TRACK, 0.5, 60.0
+        )
+
+        # Baseline was 11.845 km. Post-burn miss distance should be in 15 to 35 km range.
+        assert 15.0 <= cand.after_miss_distance_km <= 35.0, (
+            f"Unphysical miss distance scale: {cand.after_miss_distance_km} km. Expected realistic 15-35 km"
+        )
+        assert abs(cand.miss_distance_improvement_km) < 30.0, (
+            f"Unphysical miss distance improvement: {cand.miss_distance_improvement_km} km"
+        )
+
+    def test_differential_drag_drift_factor(self):
+        """Differential drag along-track drift must use exact factor 1.5, matching analytical physics."""
+        primary = _internal_rec(25544, "ISS", 0.0)
+        geom = {"area_min_m2": 5.0, "area_max_m2": 25.0, "mass_kg": 500.0, "drag_coeff": 2.2}
+        res = evaluate_attitude_reorientation(primary, 100.0, 120.0, 0.05, geometry=geom)
+
+        # Independent analytical calculation
+        lead_time_s = 120.0 * 60.0
+        alt = res.details["estimated_altitude_km"]
+        rho = res.details["atmospheric_density_kg_m3"]
+        v_orb = math.sqrt(WGS72_MU / (WGS72_EARTH_RADIUS_KM + alt)) * 1000.0
+        delta_a = geom["area_max_m2"] - geom["area_min_m2"]
+        a_drag = 0.5 * rho * (v_orb ** 2) * (geom["drag_coeff"] * delta_a / geom["mass_kg"])
+        expected_shift_km = (1.5 * a_drag * (lead_time_s ** 2)) / 1000.0
+
+        assert abs(res.estimated_along_track_shift_km - expected_shift_km) < 1e-4
+        assert res.estimated_along_track_shift_km > 0.01
+
+    def test_mean_argument_of_latitude_continuity(self):
+        """GVE in near-circular orbit couples dM = -d_omega so mean longitude does not suffer phase jump."""
+        sat = _internal_rec(25544, "ISS", 0.0)["satrec"]
+        epoch_days = _sgp4_epoch_days(EPOCH_STR)
+        t_man = 60.0
+
+        sat_man, metrics = calculate_maneuvered_elements(sat, epoch_days, t_man, 0.0, 0.0005, 0.0)
+
+        # The mean argument of latitude lambda = argpo + mo should not experience a multi-degree phase leap
+        lambda_orig = (sat.argpo + sat.mo) % (2.0 * math.pi)
+        lambda_man = (sat_man.argpo + sat_man.mo) % (2.0 * math.pi)
+        d_lambda_deg = math.degrees(abs(lambda_man - lambda_orig))
+        if d_lambda_deg > 180.0:
+            d_lambda_deg = 360.0 - d_lambda_deg
+
+        assert d_lambda_deg < 0.5, (
+            f"Mean longitude discontinuity at epoch: {d_lambda_deg:.4f} deg exceeds 0.5 deg tolerance"
+        )
