@@ -1,0 +1,7 @@
+{
+  "total_tested": 16704,
+  "success": 16704,
+  "failed": 0,
+  "failed_records": [],
+  "note": "Propagation success at epoch only. Physical accuracy (SGP4 model suitability) is not validated here."
+}
