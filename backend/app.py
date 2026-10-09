@@ -614,6 +614,13 @@ def screen_results():
 # Phase 4: Grid-Based Collision Analysis Endpoints
 # ---------------------------------------------------------------------------
 from grid_analysis import GridConfig, analyse_encounter, analyse_all_alerts
+from collision_avoidance import (
+    AvoidanceConfig, generate_hybrid_avoidance_plan,
+    evaluate_avoidance_candidate, serialise_avoidance_plan,
+    STRATEGY_PROGRADE_ALONG_TRACK, STRATEGY_RETROGRADE_ALONG_TRACK,
+    STRATEGY_POS_CROSS_TRACK, STRATEGY_NEG_CROSS_TRACK,
+    STRATEGY_POS_RADIAL, STRATEGY_NEG_RADIAL, STRATEGY_CUSTOM,
+)
 import dataclasses
 
 
@@ -808,6 +815,217 @@ def analyse_pair():
             "Not suitable for operational collision avoidance."
         ),
     })
+# ---------------------------------------------------------------------------
+# Phase 5: Hybrid Collision Avoidance Endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/avoidance/plan")
+def avoidance_plan():
+    """
+    Generate hybrid collision avoidance plan comparing multiple maneuver strategies.
+
+    Required parameters:
+      norad_a, norad_b : integer NORAD catalog IDs
+
+    Optional parameters:
+      delta_v_m_s           : float (default 0.5)
+      target_clearance_km   : float (default 15.0)
+      max_delta_v_m_s       : float (default 5.0)
+      min_lead_time_minutes : float (default 15.0)
+      lead_time_minutes     : float (optional)
+      threshold_km          : float (default 15.0)
+      horizon_minutes       : float (default 180.0)
+      spacecraft_area_min_m2: float (optional)
+      spacecraft_area_max_m2: float (optional)
+      spacecraft_mass_kg    : float (optional)
+      spacecraft_drag_coeff : float (optional)
+    """
+    import math as _math
+    from collision_screening import ScreeningConfig, screen_satellites
+
+    try:
+        norad_a = int(request.args.get("norad_a", ""))
+        norad_b = int(request.args.get("norad_b", ""))
+    except (TypeError, ValueError):
+        return jsonify({"error": "norad_a and norad_b must be integer NORAD IDs"}), 400
+
+    if norad_a not in SATELLITES or norad_b not in SATELLITES:
+        missing = [n for n in [norad_a, norad_b] if n not in SATELLITES]
+        return jsonify({"error": f"NORAD IDs not found: {missing}"}), 404
+
+    recs = [SATELLITES[norad_a], SATELLITES[norad_b]]
+
+    try:
+        dv_m_s = float(request.args.get("delta_v_m_s", 0.5))
+        clearance_km = float(request.args.get("target_clearance_km", 15.0))
+        max_dv = float(request.args.get("max_delta_v_m_s", 5.0))
+        min_lead = float(request.args.get("min_lead_time_minutes", 15.0))
+        h_min = float(request.args.get("horizon_minutes", 180.0))
+        th_km = float(request.args.get("threshold_km", 15.0))
+
+        lead_min_raw = request.args.get("lead_time_minutes")
+        lead_min = float(lead_min_raw) if lead_min_raw is not None else None
+
+        for nm, v in [("delta_v_m_s", dv_m_s), ("target_clearance_km", clearance_km),
+                      ("max_delta_v_m_s", max_dv), ("min_lead_time_minutes", min_lead)]:
+            if not _math.isfinite(v):
+                raise ValueError(f"{nm}={v} is not finite")
+
+        geom = None
+        if request.args.get("spacecraft_area_min_m2") and request.args.get("spacecraft_area_max_m2") and request.args.get("spacecraft_mass_kg"):
+            geom = {
+                "area_min_m2": float(request.args.get("spacecraft_area_min_m2")),
+                "area_max_m2": float(request.args.get("spacecraft_area_max_m2")),
+                "mass_kg": float(request.args.get("spacecraft_mass_kg")),
+                "drag_coeff": float(request.args.get("spacecraft_drag_coeff", 2.2)),
+            }
+
+        av_cfg = AvoidanceConfig(
+            delta_v_m_s=dv_m_s,
+            target_clearance_km=clearance_km,
+            max_delta_v_m_s=max_dv,
+            min_lead_time_minutes=min_lead,
+            lead_time_minutes=lead_min,
+            spacecraft_geometry=geom,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Bad avoidance config: {exc}"}), 400
+
+    dt = datetime.now(tz=timezone.utc)
+    p3_cfg = ScreeningConfig(
+        horizon_minutes=h_min,
+        coarse_step_minutes=0.5,
+        screening_threshold_km=th_km,
+        broad_phase_margin_km=200.0,
+    )
+    p3_run = screen_satellites(recs, dt, p3_cfg)
+
+    if not p3_run.alerts:
+        return jsonify({
+            "status": "SAFE",
+            "message": "No collision alert detected between specified satellites",
+            "norad_a": norad_a,
+            "norad_b": norad_b,
+            "screening_epoch": p3_run.screening_epoch,
+            "horizon_minutes": h_min,
+        }), 200
+
+    alert = p3_run.alerts[0]
+    all_recs = list(SATELLITES.values())[:50]
+    plan = generate_hybrid_avoidance_plan(alert, recs[0], recs[1], dt, av_cfg, all_recs)
+
+    return jsonify(serialise_avoidance_plan(plan)), 200
+
+
+@app.route("/api/avoidance/evaluate")
+def avoidance_evaluate():
+    """
+    Evaluate a specific candidate maneuver direction against an encounter alert.
+
+    Required parameters:
+      norad_a, norad_b : integer NORAD catalog IDs
+      direction        : string maneuver direction
+
+    Optional parameters:
+      delta_v_m_s           : float (default 0.5)
+      target_clearance_km   : float (default 15.0)
+      lead_time_minutes     : float (optional)
+      threshold_km          : float (default 15.0)
+    """
+    import math as _math
+    from collision_screening import ScreeningConfig, screen_satellites
+
+    try:
+        norad_a = int(request.args.get("norad_a", ""))
+        norad_b = int(request.args.get("norad_b", ""))
+        direction = request.args.get("direction", "").strip()
+        if not direction:
+            raise ValueError("direction parameter is required")
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Bad parameters: {exc}"}), 400
+
+    if norad_a not in SATELLITES or norad_b not in SATELLITES:
+        missing = [n for n in [norad_a, norad_b] if n not in SATELLITES]
+        return jsonify({"error": f"NORAD IDs not found: {missing}"}), 404
+
+    recs = [SATELLITES[norad_a], SATELLITES[norad_b]]
+
+    try:
+        dv_m_s = float(request.args.get("delta_v_m_s", 0.5))
+        clearance_km = float(request.args.get("target_clearance_km", 15.0))
+        max_dv = float(request.args.get("max_delta_v_m_s", 5.0))
+        min_lead = float(request.args.get("min_lead_time_minutes", 15.0))
+        h_min = float(request.args.get("horizon_minutes", 180.0))
+        th_km = float(request.args.get("threshold_km", 15.0))
+
+        lead_min_raw = request.args.get("lead_time_minutes")
+        lead_min = float(lead_min_raw) if lead_min_raw is not None else None
+
+        av_cfg = AvoidanceConfig(
+            delta_v_m_s=dv_m_s,
+            maneuver_direction=direction,
+            target_clearance_km=clearance_km,
+            max_delta_v_m_s=max_dv,
+            min_lead_time_minutes=min_lead,
+            lead_time_minutes=lead_min,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Bad avoidance config: {exc}"}), 400
+
+    dt = datetime.now(tz=timezone.utc)
+    p3_cfg = ScreeningConfig(
+        horizon_minutes=h_min,
+        coarse_step_minutes=0.5,
+        screening_threshold_km=th_km,
+        broad_phase_margin_km=200.0,
+    )
+    p3_run = screen_satellites(recs, dt, p3_cfg)
+
+    if not p3_run.alerts:
+        return jsonify({
+            "status": "SAFE",
+            "message": "No collision alert detected between specified satellites",
+            "norad_a": norad_a,
+            "norad_b": norad_b,
+        }), 200
+
+    alert = p3_run.alerts[0]
+    lead_time = lead_min if lead_min is not None else max(min_lead, min(92.9, alert.tca_minutes_from_start * 0.7))
+
+    cand = evaluate_avoidance_candidate(
+        alert, recs[0], recs[1], dt, av_cfg, direction, dv_m_s, lead_time
+    )
+
+    # Convert candidate to dict
+    cand_dict = {
+        "event_id": alert.event_id,
+        "primary_norad": norad_a,
+        "secondary_norad": norad_b,
+        "strategy_name": cand.strategy_name,
+        "maneuver_direction": cand.maneuver_direction,
+        "delta_v_m_s": cand.delta_v_m_s,
+        "delta_v_vector_rtn_m_s": list(cand.delta_v_vector_rtn_m_s),
+        "maneuver_lead_time_minutes": cand.maneuver_lead_time_minutes,
+        "maneuver_time_minutes": cand.maneuver_time_minutes,
+        "maneuver_epoch_utc": cand.maneuver_epoch_utc,
+        "before_miss_distance_km": cand.before_miss_distance_km,
+        "before_tca_minutes": cand.before_tca_minutes,
+        "before_tca_utc": cand.before_tca_utc,
+        "after_miss_distance_km": cand.after_miss_distance_km,
+        "after_tca_minutes": cand.after_tca_minutes,
+        "after_tca_utc": cand.after_tca_utc,
+        "miss_distance_improvement_km": cand.miss_distance_improvement_km,
+        "tca_delta_seconds": cand.tca_delta_seconds,
+        "clears_threshold": cand.clears_threshold,
+        "is_feasible": cand.is_feasible,
+        "feasibility_reasons": cand.feasibility_reasons,
+        "semi_major_axis_change_m": cand.semi_major_axis_change_m,
+        "orbital_period_change_s": cand.orbital_period_change_s,
+        "perigee_altitude_km": cand.perigee_altitude_km,
+    }
+    return jsonify(cand_dict), 200
+
+
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
