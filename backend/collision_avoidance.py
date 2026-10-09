@@ -286,6 +286,14 @@ class ManeuveredSatrec:
         tz = w_hat[0] * r_hat[1] - w_hat[1] * r_hat[0]
         t_hat = (tx, ty, tz)
 
+        # Transport theorem kinematics: v_inertial = v_rel + omega x delta_r
+        # Local RTN frame rotates at angular rate omega = h / r^2 along w_hat.
+        # omega x (x*r_hat + y*t_hat + z*w_hat) = omega * (x*t_hat - y*r_hat)
+        omega = h_mag / (r_mag * r_mag)
+        vx_inertial = vx - omega * y
+        vy_inertial = vy + omega * x
+        vz_inertial = vz
+
         # Superpose relative state on background unmaneuvered TEME state
         r_man = (
             r[0] + x * r_hat[0] + y * t_hat[0] + z * w_hat[0],
@@ -293,9 +301,9 @@ class ManeuveredSatrec:
             r[2] + x * r_hat[2] + y * t_hat[2] + z * w_hat[2],
         )
         v_man = (
-            v[0] + vx * r_hat[0] + vy * t_hat[0] + vz * w_hat[0],
-            v[1] + vx * r_hat[1] + vy * t_hat[1] + vz * w_hat[1],
-            v[2] + vx * r_hat[2] + vy * t_hat[2] + vz * w_hat[2],
+            v[0] + vx_inertial * r_hat[0] + vy_inertial * t_hat[0] + vz_inertial * w_hat[0],
+            v[1] + vx_inertial * r_hat[1] + vy_inertial * t_hat[1] + vz_inertial * w_hat[1],
+            v[2] + vx_inertial * r_hat[2] + vy_inertial * t_hat[2] + vz_inertial * w_hat[2],
         )
         return 0, r_man, v_man
 
