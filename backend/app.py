@@ -1,20 +1,20 @@
 """
-app.py — Akash Setu Flask API backend
+app.py ??? Akash Setu Flask API backend
 ======================================
 Serves satellite data and SGP4-propagated positions for the 3D visualization.
 
 Endpoints:
-  GET /api/satellites          — List all satellites (name, norad_id, epoch, metadata)
-  GET /api/propagate?ts=<iso>  — Propagate all loaded satellites to a UTC timestamp
-  GET /api/propagate_one?norad_id=<id>&ts=<iso> — Single satellite with full orbit path
-  GET /api/health              — Health check
+  GET /api/satellites          ??? List all satellites (name, norad_id, epoch, metadata)
+  GET /api/propagate?ts=<iso>  ??? Propagate all loaded satellites to a UTC timestamp
+  GET /api/propagate_one?norad_id=<id>&ts=<iso> ??? Single satellite with full orbit path
+  GET /api/health              ??? Health check
 
 Architecture notes:
   - Loads data from raw JSON files (data/raw/celestrak/*.json)
   - Deduplicates by NORAD_CAT_ID (stations take priority over active_satellites)
-  - SGP4 propagation converts TEME → approximate ECEF via Greenwich sidereal angle
+  - SGP4 propagation converts TEME ??? approximate ECEF via Greenwich sidereal angle
   - Positions are in km from Earth center
-  - ECEF→TEME approximation ignores polar motion and nutation (< 1 km error for visualization)
+  - ECEF???TEME approximation ignores polar motion and nutation (< 1 km error for visualization)
 
 Usage:
   python backend/app.py
@@ -165,7 +165,7 @@ def _greenwich_sidereal_angle(jd, jd_frac):
 
 
 def _teme_to_ecef(x, y, z, gmst):
-    """Rotate TEME position to ECEF (ignoring polar motion — <1 km error)."""
+    """Rotate TEME position to ECEF (ignoring polar motion ??? <1 km error)."""
     cos_g = math.cos(gmst)
     sin_g = math.sin(gmst)
     xe =  cos_g * x + sin_g * y
@@ -250,7 +250,7 @@ def health():
 
 @app.route("/api/satellites")
 def list_satellites():
-    """Return satellite metadata list (no positions — lightweight)."""
+    """Return satellite metadata list (no positions ??? lightweight)."""
     source_filter = request.args.get("source")  # "stations" or "active_satellites"
     search = request.args.get("search", "").upper()
     limit = int(request.args.get("limit", 200))
@@ -440,6 +440,174 @@ def orbit_batch():
         "orbits": results,
     })
 
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Collision Screening Endpoints
+# ---------------------------------------------------------------------------
+from collision_screening import ScreeningConfig, screen_satellites
+import dataclasses
+
+# In-memory store for the most recent screening run result
+_last_screening_run = None
+
+
+@app.route("/api/screen")
+def screen():
+    """
+    Run collision screening against a subset of loaded satellites.
+
+    Query parameters (all optional):
+      horizon_minutes       : float, default 180
+      coarse_step_minutes   : float, default 1.0
+      threshold_km          : float, default 5.0
+      broad_phase_margin_km : float, default 50.0
+      refinement_steps      : int,   default 20
+      stale_epoch_days      : float, default 14.0
+      threshold_comparison  : "lt" or "lte", default "lt"
+      norad_ids             : comma-separated NORAD IDs to screen
+                              (default: all stations + first 200 active sats)
+      limit                 : int, max satellites to include (default 222)
+
+    Response schema:
+      {
+        "run_id": str,
+        "screening_epoch": str (UTC ISO),
+        "horizon_minutes": float,
+        "coarse_step_minutes": float,
+        "screening_threshold_km": float,
+        "total_objects_input": int,
+        "objects_screened": int,
+        "objects_skipped": int,
+        "total_pairs_possible": int,
+        "pairs_after_broad_phase": int,
+        "pairs_evaluated": int,
+        "alert_count": int,
+        "alerts": [ ScreeningResult... ],
+        "skipped": [ {norad_id, name, reason}... ],
+        "runtime_seconds": float,
+        "config": { ... },
+        "disclaimer": str
+      }
+
+    IMPORTANT: A result with screening_status="ALERT" means the propagated
+    trajectories come within the threshold.  This is NOT a confirmed collision
+    or a calibrated probability.  SGP4 accuracy degrades with TLE age.
+    """
+    global _last_screening_run
+
+    # Parse config
+    import math as _math
+    try:
+        _h  = float(request.args.get("horizon_minutes", 180))
+        _cs = float(request.args.get("coarse_step_minutes", 1.0))
+        _th = float(request.args.get("threshold_km", 5.0))
+        _bm = float(request.args.get("broad_phase_margin_km", 50.0))
+        _rs = int(request.args.get("refinement_steps", 20))
+        _sd = float(request.args.get("stale_epoch_days", 14.0))
+        _tc = request.args.get("threshold_comparison", "lt")
+        # Reject NaN / Inf which would crash downstream
+        for _name, _val in [("horizon_minutes",_h),("coarse_step_minutes",_cs),
+                             ("threshold_km",_th),("broad_phase_margin_km",_bm),
+                             ("stale_epoch_days",_sd)]:
+            if not _math.isfinite(_val):
+                raise ValueError(f"{_name}={_val} is not a finite number")
+        if _cs <= 0:
+            raise ValueError("coarse_step_minutes must be > 0")
+        if _tc not in ("lt", "lte"):
+            raise ValueError(f"threshold_comparison must be 'lt' or 'lte', got {_tc!r}")
+        cfg = ScreeningConfig(
+            horizon_minutes        = _h,
+            coarse_step_minutes    = _cs,
+            screening_threshold_km = _th,
+            broad_phase_margin_km  = _bm,
+            refinement_steps       = _rs,
+            stale_epoch_days       = _sd,
+            threshold_comparison   = _tc,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Bad config parameter: {exc}"}), 400
+
+    # Select satellites
+    norad_ids_raw = request.args.get("norad_ids")
+    limit = int(request.args.get("limit", 222))
+
+    if norad_ids_raw:
+        ids = [int(x.strip()) for x in norad_ids_raw.split(",") if x.strip().isdigit()]
+        recs = [SATELLITES[nid] for nid in ids if nid in SATELLITES]
+    else:
+        station_recs = [s for s in SATELLITES.values() if s["source"] == "stations"]
+        active_recs  = [s for s in SATELLITES.values() if s["source"] != "stations"]
+        recs = station_recs + active_recs[:max(0, limit - len(station_recs))]
+
+    dt = datetime.now(tz=timezone.utc)
+    run = screen_satellites(recs, dt, cfg)
+    _last_screening_run = run
+
+    # Serialise dataclasses to dict
+    def _serialise_result(r):
+        d = dataclasses.asdict(r)
+        # Convert nan to None for JSON compatibility
+        for k, v in d.items():
+            if isinstance(v, float) and (v != v):  # nan check
+                d[k] = None
+        return d
+
+    return jsonify({
+        "run_id":                   run.run_id,
+        "screening_epoch":          run.screening_epoch,
+        "horizon_minutes":          run.horizon_minutes,
+        "coarse_step_minutes":      run.coarse_step_minutes,
+        "screening_threshold_km":   run.screening_threshold_km,
+        "total_objects_input":      run.total_objects_input,
+        "objects_screened":         run.objects_screened,
+        "objects_skipped":          run.objects_skipped,
+        "total_pairs_possible":     run.total_pairs_possible,
+        "pairs_after_broad_phase":  run.pairs_after_broad_phase,
+        "pairs_evaluated":          run.pairs_evaluated,
+        "alert_count":              sum(1 for a in run.alerts if a.screening_status == "ALERT"),
+        "alerts":                   [_serialise_result(a) for a in run.alerts],
+        "skipped":                  run.skipped,
+        "runtime_seconds":          run.runtime_seconds,
+        "config":                   run.config,
+        "disclaimer":               run.disclaimer,
+    })
+
+
+@app.route("/api/screen/results")
+def screen_results():
+    """
+    Return the most recent screening run result (if available).
+
+    This endpoint is idempotent -- it does not trigger a new screening run.
+    Returns 404 if no screening has been run since server start.
+    """
+    global _last_screening_run
+    if _last_screening_run is None:
+        return jsonify({
+            "error": "No screening run available. Call /api/screen first.",
+            "hint": "GET /api/screen to run screening with default parameters."
+        }), 404
+
+    run = _last_screening_run
+
+    def _serialise_result(r):
+        d = dataclasses.asdict(r)
+        for k, v in d.items():
+            if isinstance(v, float) and (v != v):
+                d[k] = None
+        return d
+
+    return jsonify({
+        "run_id":                   run.run_id,
+        "screening_epoch":          run.screening_epoch,
+        "alert_count":              sum(1 for a in run.alerts if a.screening_status == "ALERT"),
+        "alerts":                   [_serialise_result(a) for a in run.alerts],
+        "skipped":                  run.skipped,
+        "runtime_seconds":          run.runtime_seconds,
+        "config":                   run.config,
+        "disclaimer":               run.disclaimer,
+    })
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
@@ -467,4 +635,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
