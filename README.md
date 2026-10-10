@@ -1,6 +1,6 @@
-﻿# Akash Setu
+﻿# Aakash Setu
 
-**Akash Setu** (Sanskrit: *Bridge to the Sky*) is a research prototype for real-time satellite
+**Aakash Setu** (Sanskrit: *Bridge to the Sky*) is a research prototype for real-time satellite
 orbit tracking, conjunction screening, collision avoidance planning, and ML-based risk assessment.
 
 > **Research Prototype Disclaimer:** All outputs are mathematical estimates derived from TLE
