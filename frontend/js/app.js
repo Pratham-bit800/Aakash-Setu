@@ -94,7 +94,7 @@ function setupScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.25;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060913);
@@ -113,46 +113,183 @@ function onWindowResize() {
 
 function buildEarth() {
     const geo = new THREE.SphereGeometry(1, 64, 64);
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024; canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0, '#0c1b33');
-    grad.addColorStop(0.5, '#0d274c');
-    grad.addColorStop(1, '#0c1b33');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 1024, 512);
 
-    ctx.strokeStyle = 'rgba(79, 140, 255, 0.15)';
-    ctx.lineWidth = 1;
-    for (let lat = -80; lat <= 80; lat += 20) {
-        const y = ((90 - lat) / 180) * 512;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke();
-    }
-    for (let lon = -180; lon <= 180; lon += 30) {
-        const x = ((lon + 180) / 360) * 1024;
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+    // ------------------------------------------------------------------
+    // Procedural "Blue Marble" fallback canvas (2048 x 1024)
+    // Built immediately so the globe shows instantly while any
+    // external texture loads in the background.
+    // ------------------------------------------------------------------
+    function makeProceduralTexture() {
+        const W = 2048, H = 1024;
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+
+        // --- ocean base ---
+        const og = ctx.createLinearGradient(0, 0, 0, H);
+        og.addColorStop(0.00, '#04101e');
+        og.addColorStop(0.10, '#062040');
+        og.addColorStop(0.28, '#0b2d58');
+        og.addColorStop(0.50, '#0d3a72');
+        og.addColorStop(0.72, '#0b2d58');
+        og.addColorStop(0.90, '#062040');
+        og.addColorStop(1.00, '#04101e');
+        ctx.fillStyle = og;
+        ctx.fillRect(0, 0, W, H);
+
+        // ocean shimmer rows
+        for (let r = 0; r < H; r++) {
+            const v = Math.sin(r/H*Math.PI*18)*0.014 + Math.cos(r/H*Math.PI*9)*0.009;
+            if (Math.abs(v) > 0.003) {
+                ctx.fillStyle = v > 0 ? `rgba(30,90,180,${v*0.22})` : `rgba(2,10,30,${-v*0.18})`;
+                ctx.fillRect(0, r, W, 1);
+            }
+        }
+
+        function px(lon, lat) { return { x:(lon+180)/360*W, y:(90-lat)/180*H }; }
+        function ell(cLon, cLat, rLon, rLat, color, n) {
+            n = n||48;
+            ctx.beginPath();
+            const first = px(cLon+rLon, cLat);
+            ctx.moveTo(first.x, first.y);
+            for (let i=1; i<=n; i++) {
+                const a = i/n*Math.PI*2;
+                const p = px(cLon+rLon*Math.cos(a), cLat+rLat*Math.sin(a));
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        // continents
+        ell(22,4,27,37,'#2e5518'); ell(22,4,25,35,'#3d6222');
+        ell(18,20,15,9,'#7e6232'); ell(22,26,16,8,'#8c7240');
+        ell(15,53,25,17,'#2c4a1a'); ell(15,54,23,15,'#3e5a28');
+        ell(80,47,67,29,'#263c18'); ell(80,47,65,27,'#3a5620');
+        ell(56,25,13,9,'#b8a268'); ell(90,42,22,11,'#8c8462');
+        ell(106,23,11,8,'#4c6e2a'); ell(138,36,7,7,'#3a5620');
+        ell(78,30,11,7,'#7e8c72');
+        ell(-98,47,41,27,'#273c18'); ell(-98,47,39,25,'#3c5620');
+        ell(-110,40,15,11,'#7c6a42'); ell(-108,34,11,9,'#a47c4a');
+        ell(-58,-12,22,35,'#2e6020'); ell(-58,-12,20,33,'#3c6628');
+        ell(-66,-22,8,7,'#6c7244'); ell(-66,-38,7,9,'#5c6244');
+        ell(134,-26,22,15,'#6c4c22'); ell(134,-26,20,13,'#8c6232');
+        ell(148,-30,6,6,'#4c6228');
+        ell(-42,72,19,13,'#ccdcec'); ell(-42,72,17,11,'#dde8f4');
+        ctx.fillStyle='#c4d8e8';
+        ctx.fillRect(0,H*0.84,W,H*0.16);
+
+        // polar caps
+        let g = ctx.createRadialGradient(W/2,0,0,W/2,0,H*0.14);
+        g.addColorStop(0,'rgba(228,242,255,0.97)'); g.addColorStop(1,'rgba(200,225,248,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H*0.18);
+        g = ctx.createRadialGradient(W/2,H,0,W/2,H,H*0.15);
+        g.addColorStop(0,'rgba(228,242,255,0.99)'); g.addColorStop(1,'rgba(200,225,248,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,H*0.83,W,H*0.17);
+
+        // clouds
+        ctx.globalAlpha = 0.42;
+        let s = 137;
+        function rng(){ s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; }
+        for (let i=0;i<120;i++){
+            const cy=rng()*H, cx=rng()*W, cw=50+rng()*200, ch=10+rng()*28;
+            const lat=90-(cy/H)*180;
+            if(rng()>0.45+0.45*Math.abs(Math.sin(lat*Math.PI/90))) continue;
+            const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,cw*0.6);
+            cg.addColorStop(0,'rgba(255,255,255,0.78)');
+            cg.addColorStop(0.5,'rgba(240,248,255,0.32)');
+            cg.addColorStop(1,'rgba(240,248,255,0)');
+            ctx.save(); ctx.scale(1,ch/(cw*0.6));
+            ctx.beginPath(); ctx.arc(cx,cy*(cw*0.6)/ch,cw*0.6,0,Math.PI*2);
+            ctx.fillStyle=cg; ctx.fill(); ctx.restore();
+        }
+        ctx.globalAlpha=1;
+        return c;
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
+    // ------------------------------------------------------------------
+    // Specular map (ocean shiny, land matte, ice semi-shiny)
+    // ------------------------------------------------------------------
+    function makeSpecularMap() {
+        const W=2048,H=1024;
+        const c=document.createElement('canvas'); c.width=W; c.height=H;
+        const ctx=c.getContext('2d');
+        ctx.fillStyle='#5a7080'; ctx.fillRect(0,0,W,H); // ocean shiny
+        function px(lon,lat){return{x:(lon+180)/360*W,y:(90-lat)/180*H};}
+        function ell(cLon,cLat,rLon,rLat,n){
+            n=n||48;
+            ctx.beginPath();
+            const first=px(cLon+rLon,cLat); ctx.moveTo(first.x,first.y);
+            for(let i=1;i<=n;i++){const a=i/n*Math.PI*2;const p=px(cLon+rLon*Math.cos(a),cLat+rLat*Math.sin(a));ctx.lineTo(p.x,p.y);}
+            ctx.closePath(); ctx.fillStyle='#080808'; ctx.fill();
+        }
+        ell(22,4,25,35); ell(15,54,23,15); ell(80,47,65,27);
+        ell(56,25,13,9); ell(-98,47,39,25); ell(-58,-12,20,33);
+        ell(134,-26,20,13); ell(-42,72,17,11);
+        ctx.fillStyle='#080808'; ctx.fillRect(0,H*0.84,W,H*0.16);
+        let g=ctx.createRadialGradient(W/2,0,0,W/2,0,H*0.14);
+        g.addColorStop(0,'rgba(170,190,210,1)'); g.addColorStop(1,'rgba(170,190,210,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H*0.18);
+        g=ctx.createRadialGradient(W/2,H,0,W/2,H,H*0.15);
+        g.addColorStop(0,'rgba(170,190,210,1)'); g.addColorStop(1,'rgba(170,190,210,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,H*0.83,W,H*0.17);
+        return c;
+    }
+
+    // ------------------------------------------------------------------
+    // Build initial material with procedural texture
+    // ------------------------------------------------------------------
+    const aniso = renderer.capabilities.getMaxAnisotropy();
+    const procTex  = new THREE.CanvasTexture(makeProceduralTexture());
+    procTex.anisotropy = aniso;
+    const specTex   = new THREE.CanvasTexture(makeSpecularMap());
+
     const mat = new THREE.MeshPhongMaterial({
-        map: texture,
-        specular: new THREE.Color(0x1a3a6c),
-        shininess: 25,
-        emissive: new THREE.Color(0x030814)
+        map:          procTex,
+        specularMap:  specTex,
+        specular:     new THREE.Color(0x6699cc),
+        shininess:    80,
+        emissive:     new THREE.Color(0x020810),
+        emissiveIntensity: 1.0,
     });
+
     earthMesh = new THREE.Mesh(geo, mat);
     scene.add(earthMesh);
 
-    const atmoGeo = new THREE.SphereGeometry(1.025, 48, 48);
-    const atmoMat = new THREE.MeshBasicMaterial({
-        color: 0x4f8cff,
-        transparent: true,
-        opacity: 0.10,
-        side: THREE.BackSide
-    });
-    atmosphereMesh = new THREE.Mesh(atmoGeo, atmoMat);
-    scene.add(atmosphereMesh);
+    // ------------------------------------------------------------------
+    // Attempt to load a high-quality Blue Marble texture.
+    // Falls back silently to the procedural canvas if unreachable.
+    // Sources are tried in order; first success wins.
+    // ------------------------------------------------------------------
+    const TEXTURE_URLS = [
+        'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
+        'https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
+        'https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg',
+    ];
+
+    (function tryLoad(urls) {
+        if (!urls.length) return; // all failed, keep procedural
+        const loader = new THREE.TextureLoader();
+        loader.crossOrigin = 'anonymous';
+        loader.load(
+            urls[0],
+            function(tex) {            // success
+                tex.anisotropy = aniso;
+                mat.map = tex;
+                mat.needsUpdate = true;
+                procTex.dispose();     // free memory
+            },
+            undefined,
+            function() {               // error → try next
+                tryLoad(urls.slice(1));
+            }
+        );
+    })(TEXTURE_URLS);
+
+    // Atmosphere glow removed per user request.
+    // atmosphereMesh kept as null so other code referencing it stays safe.
+    atmosphereMesh = null;
 }
 
 function buildStars() {
@@ -173,12 +310,15 @@ function buildStars() {
 }
 
 function buildLighting() {
-    scene.add(new THREE.AmbientLight(0x223355, 1.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.0);
-    sun.position.set(5, 3, 4);
+    // Soft dark-blue ambient so night side is very dark (matches reference)
+    scene.add(new THREE.AmbientLight(0x12233a, 0.55));
+    // Sun: warm-white, high intensity for strong day-side illumination
+    const sun = new THREE.DirectionalLight(0xfff5e8, 3.0);
+    sun.position.set(5, 2, 4);
     scene.add(sun);
-    const fill = new THREE.DirectionalLight(0x335588, 0.6);
-    fill.position.set(-5, -2, -3);
+    // Subtle earthshine: very dim cold blue on the night hemisphere
+    const fill = new THREE.DirectionalLight(0x1a3a8a, 0.18);
+    fill.position.set(-5, -1, -3);
     scene.add(fill);
 }
 
@@ -1215,3 +1355,9 @@ window.deselectSat = deselectSat;
 
 // Bootstrapping
 window.addEventListener('DOMContentLoaded', init);
+
+
+
+
+
+
