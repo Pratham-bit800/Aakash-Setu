@@ -716,18 +716,28 @@ async function planAvoidanceManeuver(customNoradA = null, customNoradB = null) {
             return;
         }
 
+        // plan.miss_threshold_km is not returned by the API — use the clearance value
+        // captured from the form input above (variable `clearance`)
+        const thresholdDisplay = (typeof plan.miss_threshold_km === 'number')
+            ? plan.miss_threshold_km.toFixed(1)
+            : clearance.toFixed(1);
+
         let html = `
-            <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:6px; margin-bottom:12px; border:1px solid var(--border-color);">
-                <div style="display:flex; justify-content:space-between; font-size:11px;">
-                    <span style="color:var(--text-muted);">Baseline Miss:</span>
-                    <strong style="color:#ff4d6a;">${plan.baseline_miss_distance_km ? plan.baseline_miss_distance_km.toFixed(2) : '-'} km</strong>
+            <div class="avoidance-summary-box">
+                <div class="avoidance-summary-row">
+                    <span>Baseline Miss Distance</span>
+                    <strong style="color:#ff4d6a;">${plan.baseline_miss_distance_km != null ? plan.baseline_miss_distance_km.toFixed(3) + ' km' : '—'}</strong>
                 </div>
-                <div style="display:flex; justify-content:space-between; font-size:11px; margin-top:4px;">
-                    <span style="color:var(--text-muted);">Threshold Required:</span>
-                    <strong style="color:var(--accent);">${typeof plan.miss_threshold_km === 'number' ? plan.miss_threshold_km.toFixed(1) : '-'} km</strong>
+                <div class="avoidance-summary-row">
+                    <span>Required Clearance</span>
+                    <strong style="color:var(--accent);">${thresholdDisplay} km</strong>
+                </div>
+                <div class="avoidance-summary-row">
+                    <span>Baseline TCA</span>
+                    <strong>${plan.baseline_tca_minutes != null ? plan.baseline_tca_minutes.toFixed(1) + ' min' : '—'}</strong>
                 </div>
             </div>
-            <div style="font-size:11px; font-weight:600; margin-bottom:8px; color:var(--text-bright);">CANDIDATE MANEUVERS (${plan.candidates.length})</div>
+            <div class="avoidance-candidates-title">CANDIDATE MANEUVERS (${plan.candidates.length})</div>
         `;
 
         // Safe numeric formatters - guard against undefined/null/NaN
@@ -745,41 +755,45 @@ async function planAvoidanceManeuver(customNoradA = null, customNoradB = null) {
             const deltaMiss = fmtSign(cand.miss_distance_improvement_km ?? cand.delta_miss_km);
             const leadTime = cand.maneuver_lead_time_minutes || cand.burn_lead_time_min || 15;
 
+            const stratLabel = cand.strategy_name || dir.replace(/_/g, ' ');
+            const clearsThreshold = cand.clears_threshold ?? cand.is_feasible;
             html += `
-                <div class="candidate-card" id="cand-card-${idx}">
+                <div class="candidate-card ${isFeasible ? 'candidate-feasible' : ''}" id="cand-card-${idx}">
                     <div class="candidate-header">
-                        <span class="candidate-dir">${dir.toUpperCase()}</span>
+                        <span class="candidate-strategy-name">${stratLabel}</span>
                         <span class="badge ${badgeClass}">${badgeText}</span>
                     </div>
-                    <div class="telemetry-grid" style="margin-bottom:8px;">
-                        <div class="telemetry-item">
-                            <div class="telemetry-label">Delta-v</div>
-                            <div class="telemetry-val">${fmtMs(cand.delta_v_m_s)} m/s</div>
+                    <div class="candidate-metric-grid">
+                        <div class="candidate-metric-item">
+                            <div class="candidate-metric-label">Delta-v</div>
+                            <div class="candidate-metric-val">${fmtMs(cand.delta_v_m_s)} m/s</div>
                         </div>
-                        <div class="telemetry-item">
-                            <div class="telemetry-label">Post-Burn Miss</div>
-                            <div class="telemetry-val" style="color:#00ffaa;">${postMiss}</div>
+                        <div class="candidate-metric-item">
+                            <div class="candidate-metric-label">Post-Burn Miss</div>
+                            <div class="candidate-metric-val" style="color:#00e5a0;">${postMiss}</div>
                         </div>
-                        <div class="telemetry-item">
-                            <div class="telemetry-label">Miss Gain</div>
-                            <div class="telemetry-val">${deltaMiss}</div>
+                        <div class="candidate-metric-item">
+                            <div class="candidate-metric-label">Miss Gain</div>
+                            <div class="candidate-metric-val" style="color:${(cand.miss_distance_improvement_km ?? 0) >= 0 ? '#00e5a0' : '#ffa64d'};">${deltaMiss}</div>
                         </div>
-                        <div class="telemetry-item">
-                            <div class="telemetry-label">Burn Advance</div>
-                            <div class="telemetry-val">${(typeof leadTime === 'number' ? leadTime.toFixed(0) : leadTime)} min</div>
+                        <div class="candidate-metric-item">
+                            <div class="candidate-metric-label">Burn Advance</div>
+                            <div class="candidate-metric-val">${(typeof leadTime === 'number' ? leadTime.toFixed(1) : leadTime)} min</div>
                         </div>
                     </div>
-                    <button class="action-btn btn-secondary" style="font-size:11px; padding:6px;" 
+                    ${cand.feasibility_reasons && cand.feasibility_reasons.length ? `<div class="candidate-reasons">${cand.feasibility_reasons.slice(0,1).join('')}</div>` : ''}
+                    <button class="action-btn btn-secondary" style="font-size:11px; padding:5px 8px; margin-top:2px;"
                             onclick="visualizeCandidateTrajectory('${noradA}', '${dir}', ${cand.delta_v_m_s})">
-                        Show Post-Burn 3D Trajectory
+                        ↗ Show Post-Burn 3D Trajectory
                     </button>
                 </div>
             `;
         });
 
         html += `
-            <div class="disclaimer-box" style="margin-top:12px;">
-                RESEARCH PROTOTYPE: Maneuvers computed via impulsive Gauss equations and SGP4 re-propagation. Not an operationally validated mission assurance guarantee.
+            <div class="avoidance-footnote">
+                Maneuvers computed via impulsive Gauss equations and SGP4 re-propagation.
+                Not an operationally validated mission assurance guarantee.
             </div>
         `;
 
