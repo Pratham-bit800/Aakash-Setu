@@ -1,0 +1,262 @@
+{
+  "generated_at": "2026-10-10T00:34:27.340428+00:00",
+  "phase": 6,
+  "pipeline": "ML-Based Collision Risk Prediction Pipeline",
+  "dataset_metadata": {
+    "feature_parquet": "data\\processed\\esa_train_features.parquet",
+    "split_parquet": "data\\processed\\esa_event_split.parquet",
+    "train_rows": 120092,
+    "val_rows": 29388,
+    "train_events": 10349,
+    "val_events": 2580,
+    "event_leakage_overlap": 0,
+    "feature_count": 98
+  },
+  "models": {
+    "dummy_floor_baseline": {
+      "model_name": "DummyFloorRegressor",
+      "floor_value": -30.0,
+      "val_metrics": {
+        "overall": {
+          "n_samples": 29388,
+          "mae": 3.7768,
+          "rmse": 8.5697,
+          "spearman_rho": 0.0,
+          "pearson_r": 0.0
+        },
+        "clamped_floor_subgroup": {
+          "n_samples": 22798,
+          "pct_of_total": 77.58,
+          "mae": 0.0,
+          "rmse": 0.0
+        },
+        "unclamped_subgroup": {
+          "n_samples": 6590,
+          "pct_of_total": 22.42,
+          "mae": 16.8424,
+          "rmse": 18.097,
+          "spearman_rho": 0.0
+        }
+      }
+    },
+    "dummy_baseline": {
+      "model_name": "DummyMeanRegressor",
+      "train_mean": -26.0796,
+      "val_metrics": {
+        "overall": {
+          "n_samples": 29388,
+          "mae": 5.999,
+          "rmse": 7.6939,
+          "spearman_rho": 0.0,
+          "pearson_r": 0.0
+        },
+        "clamped_floor_subgroup": {
+          "n_samples": 22798,
+          "pct_of_total": 77.58,
+          "mae": 3.9204,
+          "rmse": 3.9204
+        },
+        "unclamped_subgroup": {
+          "n_samples": 6590,
+          "pct_of_total": 22.42,
+          "mae": 13.1901,
+          "rmse": 14.5194,
+          "spearman_rho": 0.0
+        }
+      }
+    },
+    "ridge_linear_baseline": {
+      "model_name": "RidgeLinearBaseline",
+      "alpha": 100.0,
+      "val_metrics": {
+        "overall": {
+          "n_samples": 29388,
+          "mae": 5.0937,
+          "rmse": 7.0256,
+          "spearman_rho": 0.3629,
+          "pearson_r": 0.4079
+        },
+        "clamped_floor_subgroup": {
+          "n_samples": 22798,
+          "pct_of_total": 77.58,
+          "mae": 3.3143,
+          "rmse": 4.2009
+        },
+        "unclamped_subgroup": {
+          "n_samples": 6590,
+          "pct_of_total": 22.42,
+          "mae": 11.2494,
+          "rmse": 12.6121,
+          "spearman_rho": 0.2944
+        }
+      }
+    },
+    "primary_hist_gradient_boosting_regressor": {
+      "model_name": "HistGradientBoostingRegressor",
+      "max_iter": 100,
+      "val_metrics": {
+        "overall": {
+          "n_samples": 29388,
+          "mae": 3.8143,
+          "rmse": 5.8967,
+          "spearman_rho": 0.5556,
+          "pearson_r": 0.6429
+        },
+        "clamped_floor_subgroup": {
+          "n_samples": 22798,
+          "pct_of_total": 77.58,
+          "mae": 2.4654,
+          "rmse": 3.943
+        },
+        "unclamped_subgroup": {
+          "n_samples": 6590,
+          "pct_of_total": 22.42,
+          "mae": 8.4805,
+          "rmse": 10.0635,
+          "spearman_rho": 0.4283
+        },
+        "time_to_tca_subgroups": {
+          "near_encounter_le_2d": {
+            "n_samples": 8066,
+            "mae": 2.6181,
+            "rmse": 4.629,
+            "spearman_rho": 0.5863
+          },
+          "mid_range_2d_to_5d": {
+            "n_samples": 13206,
+            "mae": 3.6944,
+            "rmse": 5.7571,
+            "spearman_rho": 0.5373
+          },
+          "early_warning_gt_5d": {
+            "n_samples": 8116,
+            "mae": 5.1981,
+            "rmse": 7.1189,
+            "spearman_rho": 0.5168
+          }
+        }
+      }
+    },
+    "high_risk_hist_gradient_boosting_classifier": {
+      "model_name": "HistGradientBoostingClassifier",
+      "class_weight": "balanced",
+      "val_metrics": {
+        "threshold": 0.5,
+        "pr_auc": 0.1827,
+        "roc_auc": 0.8899,
+        "precision": 0.2121,
+        "recall": 0.2723,
+        "f1_score": 0.2384,
+        "confusion_matrix": {
+          "tn": 28531,
+          "fp": 431,
+          "fn": 310,
+          "tp": 116
+        },
+        "positive_prevalence": 0.0145
+      }
+    }
+  },
+  "top_permutation_features": [
+    {
+      "feature": "c_position_covariance_det",
+      "importance_mean": 0.124086,
+      "importance_std": 0.006116
+    },
+    {
+      "feature": "mahalanobis_distance",
+      "importance_mean": 0.095812,
+      "importance_std": 0.001571
+    },
+    {
+      "feature": "miss_distance",
+      "importance_mean": 0.038177,
+      "importance_std": 0.004229
+    },
+    {
+      "feature": "c_sigma_t",
+      "importance_mean": 0.036448,
+      "importance_std": 0.003145
+    },
+    {
+      "feature": "time_to_tca",
+      "importance_mean": 0.029652,
+      "importance_std": 0.004192
+    },
+    {
+      "feature": "c_time_lastob_start",
+      "importance_mean": 0.029247,
+      "importance_std": 0.004787
+    },
+    {
+      "feature": "c_sigma_rdot",
+      "importance_mean": 0.024214,
+      "importance_std": 0.002074
+    },
+    {
+      "feature": "relative_velocity_t",
+      "importance_mean": 0.018032,
+      "importance_std": 0.002262
+    },
+    {
+      "feature": "c_sigma_r",
+      "importance_mean": 0.015988,
+      "importance_std": 0.00178
+    },
+    {
+      "feature": "relative_position_r",
+      "importance_mean": 0.014891,
+      "importance_std": 0.00163
+    },
+    {
+      "feature": "t_j2k_inc",
+      "importance_mean": 0.014179,
+      "importance_std": 0.002625
+    },
+    {
+      "feature": "t_span",
+      "importance_mean": 0.012663,
+      "importance_std": 0.002752
+    },
+    {
+      "feature": "t_rcs_estimate",
+      "importance_mean": 0.012357,
+      "importance_std": 0.00277
+    },
+    {
+      "feature": "c_sigma_ndot",
+      "importance_mean": 0.012174,
+      "importance_std": 0.002646
+    },
+    {
+      "feature": "c_h_per",
+      "importance_mean": 0.011776,
+      "importance_std": 0.001272
+    },
+    {
+      "feature": "c_obs_used",
+      "importance_mean": 0.01078,
+      "importance_std": 0.000572
+    },
+    {
+      "feature": "c_cr_area_over_mass",
+      "importance_mean": 0.010342,
+      "importance_std": 0.000748
+    },
+    {
+      "feature": "c_sigma_n",
+      "importance_mean": 0.00939,
+      "importance_std": 0.002054
+    },
+    {
+      "feature": "c_rcs_estimate",
+      "importance_mean": 0.009062,
+      "importance_std": 0.00278
+    },
+    {
+      "feature": "c_obs_available",
+      "importance_mean": 0.0066,
+      "importance_std": 0.001041
+    }
+  ]
+}

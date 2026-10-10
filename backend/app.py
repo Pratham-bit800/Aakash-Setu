@@ -33,6 +33,11 @@ from flask_cors import CORS
 # ---------------------------------------------------------------------------
 BACKEND_DIR  = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 RAW_DIR      = PROJECT_ROOT / "data" / "raw" / "celestrak"
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
@@ -223,7 +228,7 @@ def _compute_orbit_path(sat_data, jd, jd_frac, steps=90):
 app = Flask(__name__, static_folder=None)
 CORS(app)
 
-SATELLITES = {}  # populated at startup
+SATELLITES = _load_satellites()  # populated on load
 
 # Serve frontend files
 @app.route("/")
@@ -402,9 +407,14 @@ def orbit_batch():
     steps = min(int(request.args.get("steps", 90)), 180)
 
     if not norad_ids_raw.strip():
-        return jsonify({"error": "norad_ids required (comma-separated)"}), 400
-
-    nids = [int(x.strip()) for x in norad_ids_raw.split(",") if x.strip().isdigit()]
+        limit = min(int(request.args.get("limit", 200)), 300)
+        station_ids = [nid for nid, s in SATELLITES.items() if s.get("source") == "stations"]
+        other_ids = [nid for nid, s in SATELLITES.items() if s.get("source") != "stations"]
+        nids = (station_ids + other_ids)[:limit]
+        if not nids:
+            return jsonify({"error": "norad_ids required (comma-separated)"}), 400
+    else:
+        nids = [int(x.strip()) for x in norad_ids_raw.split(",") if x.strip().isdigit()]
 
     if ts:
         try:
@@ -1026,8 +1036,241 @@ def avoidance_evaluate():
     return jsonify(cand_dict), 200
 
 
+@app.route("/api/avoidance/trajectory")
+def avoidance_trajectory():
+    """
+    Computes the 3D post-burn orbit path (in ECEF km) for a chosen avoidance maneuver candidate.
+
+    Query parameters:
+      norad_id         : integer NORAD catalog ID of the maneuvering satellite (required)
+      direction        : string maneuver direction ('prograde_along_track', 'retrograde_along_track',
+                         'positive_radial', 'negative_radial', 'positive_cross_track', 'negative_cross_track')
+      delta_v_m_s      : float delta-v in m/s (default 0.5)
+      lead_time_minutes: float lead time before TCA / from start (default 15.0)
+      steps            : integer number of orbit steps (default 120)
+    """
+    from datetime import timedelta
+    from collision_avoidance import (
+        calculate_maneuvered_elements, ManeuveredSatrec,
+        STRATEGY_PROGRADE_ALONG_TRACK, STRATEGY_RETROGRADE_ALONG_TRACK,
+        STRATEGY_POS_RADIAL, STRATEGY_NEG_RADIAL,
+        STRATEGY_POS_CROSS_TRACK, STRATEGY_NEG_CROSS_TRACK
+    )
+
+    norad_str = request.args.get("norad_id") or request.args.get("norad_a")
+    if not norad_str:
+        return jsonify({"error": "norad_id (or norad_a) required"}), 400
+
+    try:
+        nid = int(norad_str)
+    except ValueError:
+        return jsonify({"error": "norad_id must be an integer"}), 400
+
+    if nid not in SATELLITES:
+        return jsonify({"error": f"NORAD ID {nid} not found"}), 404
+
+    s = SATELLITES[nid]
+    direction = request.args.get("direction", STRATEGY_PROGRADE_ALONG_TRACK)
+    dv_m_s = float(request.args.get("delta_v_m_s", 0.5))
+    lead_min = float(request.args.get("lead_time_minutes", 15.0))
+    steps = max(30, min(240, int(request.args.get("steps", 120))))
+
+    if dv_m_s <= 0.0 or dv_m_s > 100.0:
+        return jsonify({"error": f"delta_v_m_s must be positive and <= 100 m/s, got {dv_m_s}"}), 400
+
+    dir_lower = direction.lower()
+    if "prograde" in dir_lower or dir_lower == "+t":
+        dvr, dvt, dvw = 0.0, dv_m_s / 1000.0, 0.0
+        normalized_dir = "prograde"
+    elif "retrograde" in dir_lower or dir_lower == "-t":
+        dvr, dvt, dvw = 0.0, -dv_m_s / 1000.0, 0.0
+        normalized_dir = "retrograde"
+    elif "pos_rad" in dir_lower or "+r" in dir_lower or ("radial" in dir_lower and "neg" not in dir_lower and "in" not in dir_lower and "south" not in dir_lower):
+        dvr, dvt, dvw = dv_m_s / 1000.0, 0.0, 0.0
+        normalized_dir = "radial_out"
+    elif "neg_rad" in dir_lower or "-r" in dir_lower or ("radial" in dir_lower and "in" in dir_lower):
+        dvr, dvt, dvw = -dv_m_s / 1000.0, 0.0, 0.0
+        normalized_dir = "radial_in"
+    elif "pos_cross" in dir_lower or "+w" in dir_lower or "north" in dir_lower or ("cross" in dir_lower and "neg" not in dir_lower and "south" not in dir_lower):
+        dvr, dvt, dvw = 0.0, 0.0, dv_m_s / 1000.0
+        normalized_dir = "cross_track_north"
+    elif "neg_cross" in dir_lower or "-w" in dir_lower or "south" in dir_lower:
+        dvr, dvt, dvw = 0.0, 0.0, -dv_m_s / 1000.0
+        normalized_dir = "cross_track_south"
+    else:
+        return jsonify({"error": f"Invalid maneuver direction: {direction}"}), 400
+
+    dt = datetime.now(tz=timezone.utc)
+    jd0, jdf0 = _epoch_to_jd(dt.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+    epoch_days = jd0 + jdf0 - 2433281.5
+
+    try:
+        sat_man, changes = calculate_maneuvered_elements(s["satrec"], epoch_days, lead_min, dvr, dvt, dvw)
+        man_rec = ManeuveredSatrec(s["satrec"], sat_man, lead_min, jd0, jdf0, dv_rtn_km_s=(dvr, dvt, dvw))
+    except Exception as exc:
+        return jsonify({"error": f"Failed to compute maneuvered orbit: {exc}"}), 500
+
+    period = s.get("period_min") or 92.0
+    orbit_path = []
+    for i in range(steps):
+        t_step = i * (period / steps)
+        t_dt = dt + timedelta(minutes=t_step)
+        jd_i, jdf_i = _epoch_to_jd(t_dt.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+        gmst_i = _greenwich_sidereal_angle(jd_i, jdf_i)
+        err, pos, _ = man_rec.sgp4(jd_i, jdf_i)
+        if err == 0:
+            ecef = _teme_to_ecef(pos[0], pos[1], pos[2], gmst_i)
+            orbit_path.append([round(c, 3) for c in ecef])
+
+    return jsonify({
+        "norad_id": nid,
+        "name": s["name"],
+        "direction": normalized_dir,
+        "delta_v_m_s": dv_m_s,
+        "delta_v_vector_rtn_m_s": [round(dvr * 1000.0, 3), round(dvt * 1000.0, 3), round(dvw * 1000.0, 3)],
+        "lead_time_minutes": lead_min,
+        "orbit_path": orbit_path,
+        "steps": len(orbit_path),
+        "semi_major_axis_change_m": round(changes.get("da_m", 0.0), 3),
+        "orbital_period_change_s": round(changes.get("period_change_s", 0.0), 3),
+        "perigee_altitude_km": round(changes.get("perigee_altitude_km", 0.0), 3),
+        "disclaimer": (
+            "POST-BURN TRAJECTORY ESTIMATE ONLY. Based on impulsive Gauss Variational Equations "
+            "and Clohessy-Wiltshire relative motion superposition. Does not guarantee real-world "
+            "collision avoidance clearance."
+        ),
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: ML-Based Collision Risk Prediction Endpoints
+# ---------------------------------------------------------------------------
+
+_ml_predictor = None
+
+
+def _get_ml_predictor():
+    global _ml_predictor
+    if _ml_predictor is None:
+        try:
+            try:
+                from backend.ml_risk_engine import MLRiskPredictor
+            except ImportError:
+                from ml_risk_engine import MLRiskPredictor
+            _ml_predictor = MLRiskPredictor.load(BACKEND_DIR / "models" / "phase6")
+        except Exception as exc:
+            import traceback
+            with open('ml_err.log', 'w', encoding='utf-8') as ef:
+                ef.write(traceback.format_exc())
+            return None
+    return _ml_predictor
+
+
+@app.route("/api/v1/ml/model_info", methods=["GET"])
+def ml_model_info():
+    """
+    Returns metadata, training metrics, and operational disclaimers for the
+    Phase 6 ML Collision Risk Prediction model.
+    """
+    predictor = _get_ml_predictor()
+    if predictor is None:
+        return jsonify({
+            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+        }), 503
+
+    meta = predictor.metadata or {}
+    return jsonify({
+        "status": "available",
+        "model_version": meta.get("model_version", "1.0.0-phase6"),
+        "training_timestamp": meta.get("training_timestamp"),
+        "n_features": meta.get("n_features", len(predictor.preprocessor.feature_cols) if predictor.preprocessor else 0),
+        "evaluation_summary": meta.get("evaluation_summary", {}),
+        "top_features": meta.get("top_features", []),
+        "action_threshold": meta.get("action_threshold", -6.0),
+        "censored_risk_floor": meta.get("censored_risk_floor", -30.0),
+        "scientific_caveat": (
+            "Prototype ML model trained on historical ESA Kelvins competition CDMs. "
+            "Outputs provide relative risk estimates and do not represent certified operational "
+            "collision probabilities for active on-orbit assets. "
+            "Anonymized ESA records must never be cross-joined with live CelesTrak NORAD catalog IDs."
+        ),
+    }), 200
+
+
+@app.route("/api/v1/ml/predict_risk", methods=["POST"])
+def ml_predict_risk():
+    """
+    Predicts final collision risk (log10 probability) and high-risk classification
+    for a given Conjunction Data Message (CDM).
+
+    Payload: JSON dictionary of CDM features (e.g. time_to_tca, miss_distance,
+    relative_speed, mahalanobis_distance, c_position_covariance_det, etc.).
+    """
+    predictor = _get_ml_predictor()
+    if predictor is None:
+        return jsonify({
+            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+        }), 503
+
+    if not request.is_json:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    payload = request.get_json()
+    if not isinstance(payload, dict):
+        return jsonify({"error": "JSON payload must be an object/dictionary"}), 400
+
+    cdm_data = payload.get("cdm", payload)
+    if not isinstance(cdm_data, dict) or not cdm_data:
+        return jsonify({"error": "CDM record cannot be empty"}), 400
+
+    try:
+        result = predictor.predict_cdm(cdm_data)
+        return jsonify(result), 200
+    except Exception as exc:
+        return jsonify({"error": f"Prediction failed: {str(exc)}"}), 400
+
+
+@app.route("/api/v1/ml/predict_batch", methods=["POST"])
+def ml_predict_batch():
+    """
+    Predicts collision risk for a batch of Conjunction Data Messages (CDMs).
+
+    Payload: JSON object containing 'cdms': list of CDM feature dictionaries.
+    """
+    predictor = _get_ml_predictor()
+    if predictor is None:
+        return jsonify({
+            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+        }), 503
+
+    if not request.is_json:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    payload = request.get_json()
+    if not isinstance(payload, dict) or "cdms" not in payload:
+        return jsonify({"error": "Payload must contain a 'cdms' array of objects"}), 400
+
+    cdms = payload["cdms"]
+    if not isinstance(cdms, list) or len(cdms) == 0:
+        return jsonify({"error": "'cdms' must be a non-empty list of CDM objects"}), 400
+
+    if len(cdms) > 1000:
+        return jsonify({"error": "Batch size cannot exceed 1000 CDMs"}), 400
+
+    try:
+        results = predictor.predict_batch(cdms)
+        return jsonify({
+            "count": len(results),
+            "predictions": results,
+            "model_version": predictor.metadata.get("model_version", "1.0.0-phase6"),
+        }), 200
+    except Exception as exc:
+        return jsonify({"error": f"Batch prediction failed: {str(exc)}"}), 400
+
+
 # ---------------------------------------------------------------------------
 # Startup
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 60)
