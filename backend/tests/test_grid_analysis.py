@@ -1,13 +1,13 @@
-"""
-test_grid_analysis.py  --  Akash Setu Phase 4 essential tests
+﻿"""
+test_grid_analysis.py  --  Akash Setu Grid Analysis Tests
 ==============================================================
-Three mandatory tests as specified in Phase 4 requirements:
+Three mandatory tests:
 
   Test 1. Controlled encounter with known minimum separation.
   Test 2. Grid-refinement convergence against an independently calculated reference.
-  Test 3. Regression check: Phase 3 and existing APIs still work.
+  Test 3. Regression check: Conjunction screening and existing APIs still work.
 
-Reference-document status: No external reference was provided with the Phase 4
+Reference-document status: No external reference was provided for the grid analysis
 specification. The method is derived from standard TCA determination literature
 (Alfano 2005, Hoots 1984, Vallado 2013). This is documented in grid_analysis.py.
 
@@ -106,12 +106,12 @@ def _brute_force_min_sep(satrec_a, satrec_b, jd0, jdf0,
 
 class TestControlledEncounter:
     """
-    Use the same verified fixture from Phase 3:
+    Use the same verified fixture:
       ma_a=0.0 deg, ma_b=0.1 deg, same orbital plane.
       Phase-3 confirmed: min_sep ~ 11.85 km at t ~ 161.7 min.
 
-    Phase 4 must:
-      (a) Find an encounter (Phase 3 ALERT)
+    Grid analysis must:
+      (a) Find an encounter (ALERT)
       (b) Run grid analysis without error
       (c) Return a non-NaN, non-negative miss distance
       (d) Return a spatial_resolution_m that is positive and finite
@@ -128,7 +128,7 @@ class TestControlledEncounter:
         recs = [_iss_rec(1, "SAT-A", ma_deg=0.0), _iss_rec(2, "SAT-B", ma_deg=0.1)]
         p3_run = screen_satellites(recs, SCREENING_DT, p3_cfg)
 
-        assert len(p3_run.alerts) >= 1, "Phase 3 must find at least one encounter"
+        assert len(p3_run.alerts) >= 1, "Screening must find at least one encounter"
         alert = p3_run.alerts[0]
         assert alert.screening_status == "ALERT"
         p3_miss = alert.miss_distance_km
@@ -358,12 +358,12 @@ class TestGridConvergence:
 
 
 # ===========================================================================
-# Test 3: Regression -- Phase 3 and existing APIs still work
+# Test 3: Regression -- conjunction screening and existing APIs still work
 # ===========================================================================
 
 class TestRegression:
     """
-    Verify Phase 3 and all pre-Phase-3 functionality is unbroken.
+    Verify conjunction screening and all pre-existing functionality is unbroken.
     Uses Flask test client with synthetic satellites (no data files required).
     """
 
@@ -478,7 +478,7 @@ class TestRegression:
 
 
 # ===========================================================================
-# New essential tests (Phase 4 validation pass)
+# New essential tests (grid analysis validation pass)
 # ===========================================================================
 
 from grid_analysis import STOP_RESOLUTION, STOP_TOLERANCE, STOP_WINDOW, STOP_MAX_ITER
@@ -527,9 +527,9 @@ class TestCrossingEncounter:
         self.p3_run = screen_satellites(self.recs, SCREENING_DT, self.p3_cfg)
 
     def test_crossing_encounter_detected(self):
-        """Phase 3 must detect the co-located crossing encounter."""
+        """Screening must detect the co-located crossing encounter."""
         assert len(self.p3_run.alerts) >= 1, (
-            "Phase 3 must detect the crossing encounter at t~0; got 0 alerts"
+            "Screening must detect the crossing encounter at t~0; got 0 alerts"
         )
         alert = self.p3_run.alerts[0]
         assert alert.screening_status == "ALERT"
@@ -791,7 +791,7 @@ class TestRefinedTcaScientificCorrectness:
     def test_refined_tca_velocity_recalculated_and_used_consistently(self):
         """
         Verify that relative velocity is recalculated at refined TCA (not blindly
-        copied from Phase 3), and spatial resolution is consistently computed
+        copied from screening tests), and spatial resolution is consistently computed
         as dt * v_rel * 1000 using that refined relative velocity.
         """
         cfg = GridConfig(

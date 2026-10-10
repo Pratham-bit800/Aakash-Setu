@@ -1,12 +1,12 @@
 ﻿"""
-collision_avoidance.py  --  Akash Setu Phase 5: Hybrid Collision Avoidance Engine
+collision_avoidance.py  --  Akash Setu: Hybrid Collision Avoidance Engine
 ===================================================================================
 
-Phase 5 implements a hybrid collision avoidance framework for satellite encounters
-identified by Phase 3 screening and refined by Phase 4 grid analysis.
+This module implements a hybrid collision avoidance framework for satellite encounters
+identified by conjunction screening and refined by grid analysis.
 
 Reference-Document Status:
-  No external reference document was provided with the Phase 5 specification.
+  No external reference document was provided with the original specification.
   The methods implemented here are strictly derived from validated astrodynamics
   literature:
     - Vallado (2013): Fundamentals of Astrodynamics and Applications (4th ed.),
@@ -36,8 +36,8 @@ Avoidance Strategies Supported:
 Maneuver Re-propagation & Re-screening:
   - Maneuvered satellites are modeled via ManeuveredSatrec, preserving the unmaneuvered
     state before maneuver epoch t_man and propagating the maneuvered state thereafter.
-  - Candidate encounters are re-propagated and re-screened using the existing Phase 3
-    screening pipeline and Phase 4 grid-refinement engine.
+  - Candidate encounters are re-propagated and re-screened using the existing
+    screening pipeline and grid-refinement engine.
   - Before/after miss distances, TCA shifts, delta-v consumption, clearance thresholds,
     feasibility, and unresolved limitations are reported quantitatively.
 """
@@ -795,7 +795,7 @@ def generate_hybrid_avoidance_plan(
     ]
 
     disclaimer = (
-        "Phase 5 collision avoidance plans are propagated mathematical estimates "
+        "Collision avoidance plans are propagated mathematical estimates "
         "derived from SGP4 mean orbital elements and Gauss's Variational Equations. "
         "They do NOT constitute operational spacecraft flight commands. TLE ephemeris "
         "errors, lack of spacecraft propulsion telemetry, and absence of covariance "

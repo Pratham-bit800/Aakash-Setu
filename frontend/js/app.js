@@ -1,7 +1,7 @@
 ﻿/**
  * Akash Setu — 3D Satellite Tracking, Conjunction Screening & Avoidance Dashboard
  * ==============================================================================
- * Phase 7: Integrated 3D Earth, Orbit Trajectories, Conjunction Encounters,
+ * Integrated 3D Earth, Orbit Trajectories, Conjunction Encounters,
  *          Nested Grid Refinements (0.01m), Avoidance Maneuver Planning,
  *          and ML Collision Risk Forecasting.
  *
@@ -453,7 +453,7 @@ function startAutoRefresh() {
     }, REFRESH_INTERVAL_MS);
 }
 
-// ─── Phase 3: Conjunction Screening Integration ──────────────────────────────
+// ── Conjunction Screening Integration ──
 async function runScreening() {
     const btn = document.getElementById('btn-run-screen');
     const statusEl = document.getElementById('screening-status');
@@ -594,7 +594,7 @@ async function ensureOrbitLoaded(noradId) {
     }
 }
 
-// ─── Phase 4: Grid Refinement Handler ─────────────────────────────────────────
+// ── Grid Refinement Handler ──
 async function runGridRefinement(noradA, noradB) {
     const btn = document.getElementById('btn-grid-refine');
     const resultEl = document.getElementById('grid-refine-result');
@@ -639,7 +639,7 @@ async function runGridRefinement(noradA, noradB) {
     }
 }
 
-// PHASE 5: AVOIDANCE MANEUVER TRAJECTORY VISUALIZATION
+// ── Avoidance Maneuver Trajectory Visualization ──
 let activeManeuverLine = null;
 let activeManeuverMarker = null;
 
@@ -687,7 +687,7 @@ function renderManeuverTrajectory(orbitPathCoords, colorHex = 0x00f0ff) {
     }
 }
 
-// Phase 5 Maneuver Planning
+// ── Maneuver Planning ──
 async function planAvoidanceManeuver(customNoradA = null, customNoradB = null) {
     const noradA = customNoradA || document.getElementById('avoid-norad-a')?.value || '25544';
     const noradB = customNoradB || document.getElementById('avoid-norad-b')?.value || '36086';
@@ -809,7 +809,7 @@ async function visualizeCandidateTrajectory(noradId, direction, deltaVMs) {
     }
 }
 // ============================================================================
-// PHASE 6: MACHINE LEARNING RISK PREDICTION
+// ── Machine Learning Risk Prediction ──
 // ============================================================================
 let mlModelMetadata = null;
 

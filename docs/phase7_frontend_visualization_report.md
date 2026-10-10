@@ -92,7 +92,7 @@ fabricated. Measured values on the validation set (29,388 rows):
     Floor (-30) RMSE = 8.5697
 
 **Fix:** Report corrected to actual measured values. Both numbers are now traceable
-to the live validation run (see pre_phase7_validation_report.md §3.4).
+to the live validation run (see post_phase7_integration_audit.md §4).
 
 ---
 

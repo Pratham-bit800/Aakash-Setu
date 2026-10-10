@@ -1,4 +1,4 @@
-"""
+﻿"""
 app.py ??? Akash Setu Flask API backend
 ======================================
 Serves satellite data and SGP4-propagated positions for the 3D visualization.
@@ -453,7 +453,7 @@ def orbit_batch():
 
 
 # ---------------------------------------------------------------------------
-# Phase 3: Collision Screening Endpoints
+# Collision Screening Endpoints
 # ---------------------------------------------------------------------------
 from collision_screening import ScreeningConfig, screen_satellites
 import dataclasses
@@ -621,7 +621,7 @@ def screen_results():
 
 
 # ---------------------------------------------------------------------------
-# Phase 4: Grid-Based Collision Analysis Endpoints
+# Grid-Based Collision Analysis Endpoints
 # ---------------------------------------------------------------------------
 from grid_analysis import GridConfig, analyse_encounter, analyse_all_alerts
 from collision_avoidance import (
@@ -826,7 +826,7 @@ def analyse_pair():
         ),
     })
 # ---------------------------------------------------------------------------
-# Phase 5: Hybrid Collision Avoidance Endpoints
+# Hybrid Collision Avoidance Endpoints
 # ---------------------------------------------------------------------------
 
 @app.route("/api/avoidance/plan")
@@ -1143,7 +1143,7 @@ def avoidance_trajectory():
 
 
 # ---------------------------------------------------------------------------
-# Phase 6: ML-Based Collision Risk Prediction Endpoints
+# ML-Based Collision Risk Prediction Endpoints
 # ---------------------------------------------------------------------------
 
 _ml_predictor = None
@@ -1170,12 +1170,12 @@ def _get_ml_predictor():
 def ml_model_info():
     """
     Returns metadata, training metrics, and operational disclaimers for the
-    Phase 6 ML Collision Risk Prediction model.
+    ML-Based Collision Risk Prediction model.
     """
     predictor = _get_ml_predictor()
     if predictor is None:
         return jsonify({
-            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+            "error": "ML model artifacts not loaded. Run backend/scripts/train_ml_risk.py to generate them."
         }), 503
 
     meta = predictor.metadata or {}
@@ -1209,7 +1209,7 @@ def ml_predict_risk():
     predictor = _get_ml_predictor()
     if predictor is None:
         return jsonify({
-            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+            "error": "ML model artifacts not loaded. Run backend/scripts/train_ml_risk.py to generate them."
         }), 503
 
     if not request.is_json:
@@ -1240,7 +1240,7 @@ def ml_predict_batch():
     predictor = _get_ml_predictor()
     if predictor is None:
         return jsonify({
-            "error": "ML model artifacts not loaded. Ensure Phase 6 artifacts are trained and available."
+            "error": "ML model artifacts not loaded. Run backend/scripts/train_ml_risk.py to generate them."
         }), 503
 
     if not request.is_json:

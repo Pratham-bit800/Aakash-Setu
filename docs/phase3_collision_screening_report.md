@@ -1,4 +1,4 @@
-# Phase 3: Collision Screening Engine - Implementation Report
+﻿# Conjunction Screening: Collision Screening Engine - Implementation Report
 
 **Project:** Akash Setu  
 **Phase:** 3 - Collision Screening Engine  
@@ -11,7 +11,7 @@
 
 ## 1. Summary
 
-Phase 3 adds a modular, configurable collision-screening engine to the Akash Setu project.
+Conjunction Screening adds a modular, configurable collision-screening engine to the Akash Setu project.
 The engine screens candidate satellite pairs over a configurable future time horizon using
 SGP4-propagated TEME states, identifies close-approach events, and returns structured result
 records with stable event IDs. Two new Flask API endpoints expose the engine. All 36 unit,
@@ -222,7 +222,7 @@ the dev server.
 ## 9. Errors Encountered and Fixes Made
 
 1. /api/screen returned 404 on live server
-   Cause: Flask catch-all route matching /api/* (Phase 2 bug, already fixed)
+   Cause: Flask catch-all route matching /api/* (historical routing bug, already fixed)
    Fix: Catch-all replaced with explicit /css/, /js/, /assets/ routes
 
 2. float("NaN") passed validation, crashed at int(NaN) inside screen_satellites
@@ -246,15 +246,15 @@ the dev server.
 3. Bisection assumes single closest-approach point per coarse window
 4. screen_satellites() is synchronous - blocks Flask worker for large N
 5. _last_screening_run stores only the most recent run (no keyed store)
-6. No frontend dashboard panel for screening results (Phase 4 scope)
+6. No frontend dashboard panel for screening results (Grid Analysis scope)
 7. TLE freshness: all results degrade with TLE age
 
 ---
 
 ## 11. Git Checkpoint Details
 
-  Checkpoint tag (before Phase 3): phase2-complete
-  Phase 3 commit hash:             135cf92
+  Checkpoint tag (before Conjunction Screening): phase2-complete
+  Conjunction Screening commit hash:             135cf92
   Branch:                          branch1
   Files changed:                   7 (6 new, 1 modified)
   Insertions:                      +1156 lines
@@ -262,9 +262,9 @@ the dev server.
 
 ---
 
-## 12. Phase 3 Completion Statement
+## 12. Conjunction Screening Completion Statement
 
-Phase 3 is COMPLETE.
+Conjunction Screening is COMPLETE.
 
 All acceptance criteria have been met and verified by actual execution:
   [x] Collision-screening module implemented and modular
@@ -282,4 +282,4 @@ All acceptance criteria have been met and verified by actual execution:
   [x] Existing endpoints, datasets, and Three.js dashboard unmodified
   [x] Git commit made: 135cf92
 
-Do not proceed to Phase 4 without explicit user instruction.
+Do not proceed to Grid Analysis without explicit user instruction.

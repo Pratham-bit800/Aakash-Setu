@@ -1,5 +1,5 @@
 ﻿"""
-test_collision_avoidance.py  --  Akash Setu Phase 5: Hybrid Collision Avoidance Tests
+test_collision_avoidance.py  --  Akash Setu: Hybrid Collision Avoidance Tests
 =====================================================================================
 
 Tests covering:
@@ -230,7 +230,7 @@ class TestHybridAvoidancePlanning:
 
 
 class TestAvoidanceAPIEndpoints:
-    """Test 5: Live Flask API integration for Phase 5."""
+    """Test 5: Live Flask API integration for collision avoidance."""
 
     @pytest.fixture(autouse=True)
     def setup_app(self):
@@ -289,7 +289,7 @@ class TestAvoidanceAPIEndpoints:
 
 class TestPhase5ScientificCorrectness:
     """
-    Test 6: Independent scientific validation of Phase 5 astrodynamics.
+    Test 6: Independent scientific validation of astrodynamics.
 
     Verifies:
       1. Burn-state position continuity (zero discontinuity at burn epoch, dr < 1 mm).

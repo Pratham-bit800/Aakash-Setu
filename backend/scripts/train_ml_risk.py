@@ -1,7 +1,7 @@
 ﻿"""
 train_ml_risk.py
 ================
-Akash Setu - Phase 6 Model Training & Evaluation Script.
+Akash Setu — ML Risk Model Training & Evaluation Script.
 
 Trains baseline models, primary HistGradientBoosting regressor and classifier
 on the ESA Kelvins competition dataset, evaluates across subgroups,
@@ -48,7 +48,7 @@ logger = logging.getLogger("train_ml_risk")
 
 def main():
     t_start = time.time()
-    logger.info("Starting Phase 6 ML Model Training Pipeline...")
+    logger.info("Starting ML Risk Model Training Pipeline...")
 
     # 1. Load Data
     logger.info("Loading feature and event split parquets...")

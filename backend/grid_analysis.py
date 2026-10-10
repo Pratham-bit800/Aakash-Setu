@@ -1,10 +1,10 @@
-"""
-grid_analysis.py  --  Akash Setu Phase 4 (validation pass 2026-10-10)
+﻿"""
+grid_analysis.py  --  Akash Setu: Grid-Based Encounter Analysis
 =======================================================================
 
 REFERENCE-DOCUMENT STATUS
 --------------------------
-No external reference document was provided with the Phase 4 specification.
+No external reference document was provided with the original specification.
 If a specific reference is later supplied this module must be reviewed against
 it and any deviations corrected before operational use.
 

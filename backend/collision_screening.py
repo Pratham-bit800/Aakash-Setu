@@ -1,5 +1,5 @@
-"""
-collision_screening.py -- Akash Setu Phase 3: Collision Screening Engine
+﻿"""
+collision_screening.py -- Akash Setu: Collision Screening Engine
 =========================================================================
 Screens candidate satellite pairs for close approaches over a configurable
 future time horizon using SGP4-propagated TEME states.

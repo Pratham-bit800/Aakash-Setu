@@ -1,7 +1,7 @@
 ﻿"""
 ml_risk_engine.py
 =================
-Akash Setu - Phase 6: Machine Learning-Based Collision Risk Prediction Engine.
+Akash Setu — Machine Learning-Based Collision Risk Prediction Engine.
 
 Provides end-to-end ML training, evaluation, and inference for conjunction risk
 assessment based on the ESA Kelvins Collision Avoidance Challenge dataset.

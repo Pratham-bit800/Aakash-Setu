@@ -1,9 +1,9 @@
 ﻿"""
-Phase 7 Frontend 3D Conjunction & Avoidance Visualization Integration Tests
+Frontend Integration Tests: 3D Conjunction & Avoidance Visualization
 ===========================================================================
 Tests API endpoints, static assets serving, and end-to-end multi-phase workflows
-linking Phase 3 screening, Phase 4 grid refinement, Phase 5 maneuver planning,
-Phase 6 ML risk prediction, and Phase 7 3D maneuver trajectory generation.
+covering conjunction screening, grid refinement, maneuver planning,
+ML risk prediction, and 3D maneuver trajectory generation.
 """
 
 import math
@@ -120,7 +120,7 @@ class TestMultiphaseEndToEndWorkflow:
     """Verifies seamless multi-phase integration across Phases 3, 4, 5, 6, and 7."""
 
     def test_complete_encounter_workflow(self, client):
-        # 1. Phase 3: Run screening
+        # 1. Run screening
         screen_resp = client.get("/api/screen?threshold_km=150.0&horizon_hours=2.0")
         assert screen_resp.status_code == 200
         screen_data = screen_resp.get_json()
@@ -132,21 +132,21 @@ class TestMultiphaseEndToEndWorkflow:
         norad_a = sats[0]
         norad_b = sats[1]
 
-        # 2. Phase 4: Run nested grid refinement on this pair
+        # 2. Run nested grid refinement on this pair
         refine_resp = client.get(f"/api/analyse/pair?norad_a={norad_a}&norad_b={norad_b}&window_minutes=15.0&initial_step_s=10.0")
         assert refine_resp.status_code == 200
         refine_data = refine_resp.get_json()
         assert "grid_analyses" in refine_data
         assert "accuracy_disclaimer" in refine_data or "stop_reasons_summary" in refine_data
 
-        # 3. Phase 5: Plan avoidance maneuvers
+        # 3. Plan avoidance maneuvers
         plan_resp = client.get(f"/api/avoidance/plan?norad_a={norad_a}&norad_b={norad_b}&miss_threshold_km=15.0&dv_mag=0.5")
         assert plan_resp.status_code == 200
         plan_data = plan_resp.get_json()
         candidates = plan_data.get("candidates") or plan_data.get("plan", {}).get("candidates", [])
         assert len(candidates) >= 4
 
-        # 4. Phase 7: Fetch 3D trajectory for top candidate
+        # 4. Fetch 3D trajectory for top candidate
         top_cand = candidates[0]
         cand_dir = top_cand.get("maneuver_direction") or top_cand.get("direction", "prograde")
         cand_dv = top_cand.get("delta_v_m_s", 0.5)
@@ -157,7 +157,7 @@ class TestMultiphaseEndToEndWorkflow:
         traj_data = traj_resp.get_json()
         assert len(traj_data["orbit_path"]) == 90
 
-        # 5. Phase 6: Predict ML risk using encounter features
+        # 5. Predict ML risk using encounter features
         ml_resp = client.post("/api/v1/ml/predict_risk", json={
             "features": {
                 "time_to_tca_hours": 1.5,

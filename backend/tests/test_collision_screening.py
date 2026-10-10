@@ -1,5 +1,5 @@
-"""
-test_collision_screening.py  --  Akash Setu Phase 3 test suite
+﻿"""
+test_collision_screening.py  --  Akash Setu: Collision Screening Tests
 Run: cd <project_root> && python -m pytest backend/tests/test_collision_screening.py -v
 """
 from __future__ import annotations
