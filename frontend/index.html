@@ -430,6 +430,7 @@
   });
 
   retryBtn.addEventListener("click", () => {
+    if (isRequesting) return;
     hideError();
     if (lastQuestion) sendMessage(lastQuestion, true);
   });
@@ -576,6 +577,14 @@
     isRequesting = val;
     sendBtn.disabled = val;
     inputEl.disabled = val;
+    // Disable / re-enable all suggestion chips
+    suggsEl.querySelectorAll(".ai-chip").forEach(c => {
+      c.disabled = val;
+      c.style.pointerEvents = val ? "none" : "";
+      c.style.opacity = val ? "0.45" : "";
+    });
+    // Prevent re-clicking retry while a request is in flight
+    retryBtn.disabled = val;
   }
 
   function scrollToBottom() {
@@ -634,5 +643,6 @@
 </script>
 </body>
 </html>
+
 
 

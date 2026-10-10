@@ -1340,8 +1340,8 @@ def _build_grounding_context(
         real_alerts.sort(key=lambda a: a.miss_distance_km)
         for i, a in enumerate(real_alerts[:3], 1):
             lines.append(
-                f"  Alert {i}: {a.primary_name} (NORAD {a.primary_norad_id}) vs "
-                f"{a.secondary_name} (NORAD {a.secondary_norad_id}), "
+                f"  Alert {i}: {a.name_1} (NORAD {a.norad_id_1}) vs "
+                f"{a.name_2} (NORAD {a.norad_id_2}), "
                 f"Miss distance: {a.miss_distance_km:.3f} km, "
                 f"TCA: {a.tca_utc}, Event ID: {a.event_id}."
             )
@@ -1353,7 +1353,7 @@ def _build_grounding_context(
             if match:
                 lines.append(
                     f"SELECTED EVENT ({selected_event_id}): "
-                    f"{match.primary_name} vs {match.secondary_name}, "
+                    f"{match.name_1} vs {match.name_2}, "
                     f"Miss distance: {match.miss_distance_km:.3f} km, "
                     f"Relative speed: {match.relative_speed_km_s:.3f} km/s, "
                     f"TCA: {match.tca_utc}, Status: {match.screening_status}."
@@ -1525,6 +1525,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
