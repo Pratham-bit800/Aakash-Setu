@@ -876,35 +876,32 @@ async function runMLPrediction(customPayload = null) {
             const probPct = pred.high_risk_probability !== undefined ? (pred.high_risk_probability * 100).toFixed(1) : '0.0';
 
             resultCard.innerHTML = `
-                <div class="ml-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:600; font-size:12px; color:var(--text-bright);">ESA KELVINS ML PREDICTION</span>
-                    <span class="badge ${badgeClass}">${riskText}</span>
+                <div class="ml-result-header">
+                    <span class="ml-result-title">ML Conjunction Risk</span>
+                    <span class="ml-risk-badge ${isHigh ? 'high' : 'low'}">${riskText}</span>
                 </div>
-                <div class="telemetry-grid">
-                    <div class="telemetry-item">
-                        <div class="telemetry-label">Predicted Risk (log10)</div>
-                        <div class="telemetry-val" style="color:#00ffaa;">${predRisk.toFixed(3)}</div>
+                <div class="ml-telemetry-grid">
+                    <div class="ml-telemetry-item">
+                        <div class="ml-telemetry-label">Predicted Risk (log10)</div>
+                        <div class="ml-telemetry-value" style="color:#00e5a0;">${predRisk.toFixed(3)}</div>
                     </div>
-                    <div class="telemetry-item">
-                        <div class="telemetry-label">High Risk Probability</div>
-                        <div class="telemetry-val" style="color:${isHigh ? '#ff4d6a' : 'var(--text-bright)'};">${probPct}%</div>
+                    <div class="ml-telemetry-item">
+                        <div class="ml-telemetry-label">High-Risk Probability</div>
+                        <div class="ml-telemetry-value" style="color:${isHigh ? '#ff4d6a' : 'var(--text-primary)'}">${probPct}%</div>
                     </div>
-                    <div class="telemetry-item">
-                        <div class="telemetry-label">Classification Threshold</div>
-                        <div class="telemetry-val">log10(R) ≥ -6.0</div>
+                    <div class="ml-telemetry-item">
+                        <div class="ml-telemetry-label">Classification Threshold</div>
+                        <div class="ml-telemetry-value">log10(R) &ge; &minus;6.0</div>
                     </div>
-                    <div class="telemetry-item">
-                        <div class="telemetry-label">Model Confidence</div>
-                        <div class="telemetry-val">${pred.confidence_level || 'Validated'}</div>
+                    <div class="ml-telemetry-item">
+                        <div class="ml-telemetry-label">Model Confidence</div>
+                        <div class="ml-telemetry-value">${pred.confidence_level || 'Validated'}</div>
                     </div>
                 </div>
-
-                <div style="font-size:11px; margin-top:10px; color:var(--text-muted);">
-                    <strong>Input Summary:</strong> Miss: ${payload.features.miss_distance_m}m | TCA: ${payload.features.time_to_tca_hours}h | Speed: ${(payload.features.relative_speed_m_s / 1000).toFixed(1)} km/s
-                </div>
-
-                <div class="disclaimer-box" style="margin-top:12px;">
-                    RESEARCH WARNING: ML risk score is a machine learning heuristic derived from historical ESA Kelvins CDMs. It is NOT an operationally certified collision probability (Pc).
+                <div class="ml-input-summary">
+                    <strong>Inputs:</strong> Miss ${payload.features.miss_distance_m} m &middot;
+                    TCA ${payload.features.time_to_tca_hours} d &middot;
+                    Speed ${(payload.features.relative_speed_m_s / 1000).toFixed(1)} km/s
                 </div>
             `;
         }
