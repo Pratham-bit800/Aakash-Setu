@@ -1,62 +1,30 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Akash Setu – Real-time 3D satellite orbit visualization powered by SGP4 propagation and Two-Line Element data.">
-    <title>Akash Setu | 3D Satellite Tracker</title>
+    <meta name="description" content="Akash Setu — Real-time 3D satellite orbit visualization, conjunction screening, grid refinement, hybrid collision avoidance, and ML risk forecasting.">
+    <title>Akash Setu | 3D Conjunction & Avoidance Operations</title>
 
-    <!-- Fonts -->
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-    <!-- Three.js r158 (stable, no ES module required) -->
+    <!-- Three.js r128 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-    <!-- OrbitControls (matching r128) -->
-    <script>
-    // Inline OrbitControls compatible with Three.js r128
-    // Source: Three.js examples/js/controls/OrbitControls.js
-    </script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <!-- Styles -->
     <link rel="stylesheet" href="css/style.css">
-
-    <style>
-        /* Inline critical overrides */
-        .search-box { position: relative; padding: 14px 14px 4px; }
-        .filter-tabs { padding: 6px 14px 12px; }
-        .side-panel > .section-label {
-            font-size: 10px; font-weight: 600; letter-spacing: 1px;
-            text-transform: uppercase; color: var(--text-muted);
-            padding: 10px 14px 2px;
-        }
-        .panel-toggle-btn {
-            position: fixed; top: 74px; z-index: 110;
-            width: 34px; height: 34px;
-            background: var(--bg-panel); border: 1px solid var(--border);
-            border-radius: 8px; color: var(--text-secondary);
-            cursor: pointer; font-size: 15px;
-            display: flex; align-items: center; justify-content: center;
-            transition: left 0.2s ease, background 0.2s;
-        }
-        .panel-toggle-btn:hover { background: rgba(79,140,255,0.2); color: var(--text-primary); }
-        .panel-visible .panel-toggle-btn { left: 360px; }
-        .panel-hidden  .panel-toggle-btn { left: 12px; }
-        body.panel-visible .side-panel { transform: translateX(0); }
-        body.panel-hidden  .side-panel { transform: translateX(-360px); }
-        .side-panel { transition: transform 0.25s cubic-bezier(.4,0,.2,1); }
-    </style>
 </head>
 <body class="panel-visible">
 
 <!-- Loading overlay -->
-<div class="loading-overlay">
+<div class="loading-overlay" id="loading-overlay">
     <div class="loading-spinner"></div>
-    <div class="loading-text">Initializing 3D Earth &amp; loading satellite data…</div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:-10px;">
-        Connecting to Flask API at localhost:5000
+    <div class="loading-text">Initializing 3D Earth &amp; Loading Satellite Telemetry…</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:-6px;">
+        Connecting to Akash Setu Core at localhost:5000
     </div>
 </div>
 
@@ -67,70 +35,207 @@
 <header class="top-bar">
     <div class="logo">
         <div class="logo-icon">🛰</div>
-        <span>Akash Setu</span>
+        <span class="logo-text">Akash Setu</span>
+        
     </div>
 
-    <div class="stats-badge" id="stats-text">Loading satellites…</div>
+    <!-- Navigation Mode Switcher -->
+    <nav class="mode-nav" aria-label="Operational views">
+        <button class="mode-tab active" data-mode="tracker" id="tab-tracker">
+            <span class="tab-icon">🌐</span> Tracker
+        </button>
+        <button class="mode-tab" data-mode="screening" id="tab-screening">
+            <span class="tab-icon">⚠️</span> Conjunctions
+        </button>
+        <button class="mode-tab" data-mode="avoidance" id="tab-avoidance">
+            <span class="tab-icon">🚀</span> Avoidance
+        </button>
+        <button class="mode-tab" data-mode="ml_risk" id="tab-ml-risk">
+            <span class="tab-icon">🧠</span> ML Risk
+        </button>
+    </nav>
 
-    <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+    <!-- Stats & Live Telemetry Clock -->
+    <div class="header-right">
+        <div class="stats-badge" id="stats-text">Loading satellites…</div>
         <div class="time-display">
             <div class="live-dot"></div>
             <span id="sim-time">–</span>
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">
-            SGP4 propagated • 30s refresh
         </div>
     </div>
 </header>
 
 <!-- Panel toggle button -->
-<button class="panel-toggle-btn" id="panel-toggle" title="Toggle satellite list" aria-label="Toggle satellite panel">
+<button class="panel-toggle-btn" id="panel-toggle" title="Toggle control panel" aria-label="Toggle panel">
     ☰
 </button>
 
-<!-- Left side panel: satellite list -->
-<aside class="side-panel" role="complementary" aria-label="Satellite list">
+<!-- Left side panel -->
+<aside class="side-panel" id="side-panel" role="complementary" aria-label="Operational panel">
 
-    <div class="section-label">Satellites</div>
+    <!-- VIEW 1: Tracker View (Satellites) -->
+    <div class="view-container active" id="view-tracker">
+        <div class="section-label">Satellite Catalog</div>
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input
+                id="search-input"
+                class="search-input"
+                type="search"
+                placeholder="Search name or NORAD ID…"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Search satellites"
+            >
+        </div>
 
-    <!-- Search -->
-    <div class="search-box">
-        <span style="position:absolute;left:26px;top:25px;color:var(--text-muted);font-size:14px;pointer-events:none;">🔍</span>
-        <input
-            id="search-input"
-            class="search-input"
-            type="search"
-            placeholder="Search by name or NORAD ID…"
-            autocomplete="off"
-            spellcheck="false"
-            aria-label="Search satellites"
-        >
-    </div>
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">All</button>
+            <button class="filter-tab" data-filter="stations">Stations</button>
+            <button class="filter-tab" data-filter="active_satellites">Active</button>
+        </div>
 
-    <!-- Source filter tabs -->
-    <div class="filter-tabs">
-        <button class="filter-tab active" data-filter="all">All</button>
-        <button class="filter-tab" data-filter="stations">Stations</button>
-        <button class="filter-tab" data-filter="active_satellites">Active</button>
-    </div>
-
-    <!-- Scrollable list -->
-    <div class="sat-list" id="sat-list" role="list" aria-label="Satellite entries">
-        <div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">
-            Loading…
+        <div class="sat-list" id="sat-list" role="list" aria-label="Satellite entries">
+            <div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;">
+                Loading satellite database…
+            </div>
         </div>
     </div>
+
+    <!-- VIEW 2: Conjunction Screening View -->
+    <div class="view-container" id="view-screening">
+        <div class="section-label">Conjunction Screening</div>
+
+        <div class="control-card">
+            <div class="control-row">
+                <label for="screen-threshold">Threshold (km):</label>
+                <input type="number" id="screen-threshold" value="50.0" min="1.0" max="500.0" step="5.0">
+            </div>
+            <div class="control-row">
+                <label for="screen-horizon">Horizon (hrs):</label>
+                <input type="number" id="screen-horizon" value="3.0" min="0.5" max="24.0" step="0.5">
+            </div>
+            <div class="control-row">
+                <label for="screen-sample">Sample Limit:</label>
+                <input type="number" id="screen-sample" value="60" min="10" max="300" step="10">
+            </div>
+            <button class="action-btn btn-primary" id="btn-run-screen">
+                ⚡ Run Collision Screening
+            </button>
+        </div>
+
+        <div class="screening-status-bar" id="screening-status">
+            Click "Run Collision Screening" to evaluate catalog pairs.
+        </div>
+
+        <div class="section-label" style="margin-top:12px;">Active Conjunction Alerts</div>
+        <div class="alerts-list" id="conjunctions-list">
+            <div class="empty-state">No screening run executed yet.</div>
+        </div>
+    </div>
+
+    <!-- VIEW 3: Collision Avoidance Maneuver View -->
+    <div class="view-container" id="view-avoidance">
+        <div class="section-label">Avoidance Planning</div>
+
+        <div class="control-card">
+            <div class="control-row">
+                <label for="avoid-norad-a">Primary Sat (NORAD):</label>
+                <input type="number" id="avoid-norad-a" value="25544">
+            </div>
+            <div class="control-row">
+                <label for="avoid-norad-b">Secondary Sat (NORAD):</label>
+                <input type="number" id="avoid-norad-b" value="36086">
+            </div>
+            <div class="control-row">
+                <label for="avoid-dv">Δv Magnitude (m/s):</label>
+                <input type="number" id="avoid-dv" value="0.5" min="0.05" max="10.0" step="0.05">
+            </div>
+            <div class="control-row">
+                <label for="avoid-clearance">Target Clear (km):</label>
+                <input type="number" id="avoid-clearance" value="15.0" min="1.0" max="100.0" step="1.0">
+            </div>
+            <button class="action-btn btn-primary" id="btn-plan-avoidance">
+                🚀 Generate Avoidance Plan
+            </button>
+        </div>
+
+        <div class="section-label" style="margin-top:12px;">Candidate Maneuver Strategies</div>
+        <div class="candidates-container" id="avoidance-candidates-list">
+            <div class="empty-state">Select an alert or enter NORAD IDs to compute maneuvers.</div>
+        </div>
+    </div>
+
+    <!-- VIEW 4: ML Risk Prediction View -->
+    <div class="view-container" id="view-ml-risk">
+        <div class="section-label">ML Conjunction Risk Forecasting</div>
+
+        <div class="control-card">
+            <div class="ml-form-grid">
+                <label class="ml-form-full" for="ml-preset">Scenario Preset</label>
+                <select id="ml-preset" class="form-select ml-form-full">
+                    <option value="critical">Critical Conjunction (TCA: 1.2d, Miss: 320m)</option>
+                    <option value="elevated">Elevated Risk Pass (TCA: 3.5d, Miss: 2.5km)</option>
+                    <option value="safe">Low-Risk Nominal Pass (TCA: 6.0d, Miss: 18km)</option>
+                    <option value="custom">Custom Parameters</option>
+                </select>
+
+                <label for="ml-time-tca">Time to TCA (days)</label>
+                <input type="number" id="ml-time-tca" value="1.2" min="0.01" max="14.0" step="0.1">
+
+                <label for="ml-miss-dist">Miss Distance (m)</label>
+                <input type="number" id="ml-miss-dist" value="320.0" min="0.0" max="50000.0" step="10.0">
+
+                <label for="ml-rel-speed">Relative Speed (m/s)</label>
+                <input type="number" id="ml-rel-speed" value="14200.0" min="100.0" max="20000.0" step="100.0">
+
+                <label for="ml-obj-type">Chaser Type</label>
+                <select id="ml-obj-type">
+                    <option value="DEBRIS">DEBRIS</option>
+                    <option value="PAYLOAD">PAYLOAD</option>
+                    <option value="ROCKET BODY">ROCKET BODY</option>
+                    <option value="UNKNOWN">UNKNOWN</option>
+                </select>
+
+                <label for="ml-mahalanobis">Mahalanobis Dist</label>
+                <input type="number" id="ml-mahalanobis" value="1.8" min="0.0" max="50.0" step="0.1">
+            </div>
+            <button class="action-btn btn-primary" id="btn-predict-ml" style="margin-top:8px; width:100%;">
+                Run ML Risk Forecast
+            </button>
+        </div>
+
+        <div class="ml-result-card" id="ml-result-display" style="display:none;">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
 </aside>
 
-<!-- Right detail panel (hidden until satellite selected) -->
-<aside class="detail-panel hidden" id="detail-panel" role="complementary" aria-label="Satellite details">
-    <!-- Populated by JS -->
+<!-- Right detail panel -->
+<aside class="detail-panel hidden" id="detail-panel" role="complementary" aria-label="Encounter details">
+    <!-- Populated dynamically by JS -->
 </aside>
 
+<!-- Floating 3D Scene Controls & Legend -->
+<div class="scene-legend">
+    <div class="legend-header">3D Scene Layers</div>
+    <div class="legend-item"><span class="legend-dot dot-station"></span> Space Station Orbit</div>
+    <div class="legend-item"><span class="legend-dot dot-sat"></span> Active Satellite Orbit</div>
+    <div class="legend-item"><span class="legend-dot dot-conjunction-1"></span> Primary Conjunction Sat</div>
+    <div class="legend-item"><span class="legend-dot dot-conjunction-2"></span> Secondary Conjunction Sat</div>
+    <div class="legend-item"><span class="legend-dot dot-maneuver"></span> Post-Burn Trajectory (Cyan)</div>
+    <div class="legend-actions">
+        <button class="btn-sm" id="btn-reset-cam">Reset Camera</button>
+        <button class="btn-sm" id="btn-clear-scene">Clear Overlay</button>
+    </div>
+</div>
+
+<!-- Scripts -->
 <script src="js/app.js"></script>
 
 <script>
-// Panel toggle wiring (needs DOM + JS loaded)
+// Wire up panel toggle
 (function() {
     const btn = document.getElementById('panel-toggle');
     if (!btn) return;
