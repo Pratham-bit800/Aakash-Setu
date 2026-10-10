@@ -247,5 +247,392 @@
 })();
 </script>
 
+<!-- =========================================================
+     Akash Setu AI - Floating Chat Assistant
+     ========================================================= -->
+
+<!-- Floating trigger button -->
+<button id="ai-chat-btn" aria-label="Open Akash Setu AI assistant" title="Akash Setu AI">
+  &#129302;
+</button>
+
+<!-- Chat panel -->
+<div id="ai-chat-panel" class="ai-panel-hidden" role="dialog" aria-modal="true" aria-label="Akash Setu AI Assistant">
+
+  <!-- Header -->
+  <div class="ai-header">
+    <div class="ai-header-icon">&#129302;</div>
+    <div class="ai-header-text">
+      <div class="ai-header-title">Akash Setu AI</div>
+      <div class="ai-header-subtitle">Satellite Intelligence Assistant</div>
+    </div>
+    <div class="ai-header-actions">
+      <button class="ai-icon-btn" id="ai-minimize-btn" title="Minimize" aria-label="Minimize chat">&#8212;</button>
+      <button class="ai-icon-btn" id="ai-close-btn"    title="Close"    aria-label="Close chat">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Conversation area -->
+  <div class="ai-messages" id="ai-messages" aria-live="polite" aria-label="Conversation history"></div>
+
+  <!-- Error banner (hidden by default) -->
+  <div class="ai-error-banner" id="ai-error-banner" style="display:none;">
+    <span id="ai-error-text"></span>
+    <button class="ai-error-retry" id="ai-retry-btn">Retry</button>
+  </div>
+
+  <!-- Suggestion chips -->
+  <div class="ai-suggestions" id="ai-suggestions"></div>
+
+  <!-- Input -->
+  <div class="ai-input-area">
+    <textarea
+      id="ai-input"
+      placeholder="Ask about satellites, conjunctions, orbits..."
+      rows="1"
+      aria-label="Ask the AI assistant"
+      maxlength="2000"
+    ></textarea>
+    <button id="ai-send-btn" aria-label="Send message" title="Send (Enter)">&#10148;</button>
+  </div>
+</div>
+
+<!-- AI Chat Script -->
+<script>
+(function () {
+  "use strict";
+
+  // -------------------------------------------------------------------------
+  // Config
+  // -------------------------------------------------------------------------
+  const AI_BASE = (window.location.protocol === "file:" ||
+    (window.location.hostname === "localhost" && window.location.port !== "5000") ||
+    (window.location.hostname === "127.0.0.1" && window.location.port !== "5000"))
+    ? "http://127.0.0.1:5000"
+    : "";
+
+  const MAX_HISTORY_TURNS = 10;
+
+  // -------------------------------------------------------------------------
+  // State
+  // -------------------------------------------------------------------------
+  let chatHistory = [];   // [{role, content}]
+  let isRequesting = false;
+  let lastQuestion = "";
+  let suggestionsLoaded = false;
+  let panelOpen = false;
+  let panelMinimized = false;
+
+  // -------------------------------------------------------------------------
+  // DOM refs
+  // -------------------------------------------------------------------------
+  const btn       = document.getElementById("ai-chat-btn");
+  const panel     = document.getElementById("ai-chat-panel");
+  const msgBox    = document.getElementById("ai-messages");
+  const inputEl   = document.getElementById("ai-input");
+  const sendBtn   = document.getElementById("ai-send-btn");
+  const minBtn    = document.getElementById("ai-minimize-btn");
+  const closeBtn  = document.getElementById("ai-close-btn");
+  const errorBan  = document.getElementById("ai-error-banner");
+  const errorText = document.getElementById("ai-error-text");
+  const retryBtn  = document.getElementById("ai-retry-btn");
+  const suggsEl   = document.getElementById("ai-suggestions");
+
+  // -------------------------------------------------------------------------
+  // Panel open / close / minimize
+  // -------------------------------------------------------------------------
+  function openPanel() {
+    panelOpen = true;
+    panelMinimized = false;
+    panel.classList.remove("ai-panel-hidden", "ai-panel-minimized");
+    inputEl.focus();
+    if (!suggestionsLoaded) loadSuggestions();
+    if (msgBox.children.length === 0) showWelcome();
+  }
+
+  function closePanel() {
+    panelOpen = false;
+    panel.classList.add("ai-panel-hidden");
+  }
+
+  function toggleMinimize() {
+    panelMinimized = !panelMinimized;
+    panel.classList.toggle("ai-panel-minimized", panelMinimized);
+    minBtn.textContent = panelMinimized ? "+" : "\u2014";
+  }
+
+  btn.addEventListener("click", () => { if (!panelOpen) openPanel(); else closePanel(); });
+  closeBtn.addEventListener("click", closePanel);
+  minBtn.addEventListener("click", toggleMinimize);
+
+  // -------------------------------------------------------------------------
+  // Welcome message
+  // -------------------------------------------------------------------------
+  function showWelcome() {
+    appendAssistantMsg(
+      "Hello! I'm **Akash Setu AI**, your satellite intelligence assistant.\n\n" +
+      "I can answer questions about the tracked satellites, conjunction alerts, " +
+      "orbital mechanics (SGP4, GVE), avoidance maneuver planning, and the ML risk engine.\n\n" +
+      "Select a topic below or type your question."
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Suggestions
+  // -------------------------------------------------------------------------
+  async function loadSuggestions() {
+    suggestionsLoaded = true;
+    try {
+      const resp = await fetch(`${AI_BASE}/api/ai/suggestions`);
+      if (!resp.ok) throw new Error("suggestions fetch failed");
+      const data = await resp.json();
+      renderSuggestions(data.suggestions || []);
+    } catch (_) {
+      // Fallback built-in chips
+      renderSuggestions([
+        { id: "sgp4",     label: "How does SGP4 work?",              question: "How does SGP4 work?" },
+        { id: "miss_tca", label: "Explain miss distance and TCA.",    question: "Explain miss distance and TCA." },
+        { id: "esa",      label: "Explain the ESA dataset.",         question: "Explain the ESA collision-avoidance dataset." },
+      ]);
+    }
+  }
+
+  function renderSuggestions(suggestions) {
+    suggsEl.innerHTML = "";
+    suggestions.slice(0, 6).forEach(s => {
+      const chip = document.createElement("button");
+      chip.className = "ai-chip";
+      chip.title = s.question;
+      chip.textContent = s.label;
+      chip.addEventListener("click", () => {
+        if (isRequesting) return;
+        sendMessage(s.question);
+        suggsEl.style.display = "none";
+      });
+      suggsEl.appendChild(chip);
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Send / receive
+  // -------------------------------------------------------------------------
+  sendBtn.addEventListener("click", () => sendFromInput());
+  inputEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendFromInput();
+    }
+  });
+  // Auto-resize textarea
+  inputEl.addEventListener("input", () => {
+    inputEl.style.height = "auto";
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + "px";
+  });
+
+  retryBtn.addEventListener("click", () => {
+    hideError();
+    if (lastQuestion) sendMessage(lastQuestion, true);
+  });
+
+  function sendFromInput() {
+    const q = inputEl.value.trim();
+    if (!q || isRequesting) return;
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+    sendMessage(q);
+  }
+
+  async function sendMessage(question, isRetry = false) {
+    if (isRequesting) return;
+    if (!isRetry) lastQuestion = question;
+
+    hideError();
+    appendUserMsg(question);
+    setRequesting(true);
+
+    // Read selected satellite/event context from global state set by app.js.
+    // Use window.selectedNoradId directly to avoid any block-scope shadowing.
+    const noradId   = (window.selectedNoradId !== undefined && window.selectedNoradId !== null)
+                      ? window.selectedNoradId : null;
+    const eventId   = window._aiSelectedEventId || null;
+
+    const typingId = showTyping();
+
+    try {
+      const resp = await fetch(`${AI_BASE}/api/ai/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question:           question,
+          history:            chatHistory.slice(-(MAX_HISTORY_TURNS * 2)),
+          selected_norad_id:  noradId,
+          selected_event_id:  eventId,
+        }),
+        signal: AbortSignal.timeout(40000),
+      });
+
+      removeTyping(typingId);
+
+      let data;
+      try {
+        data = await resp.json();
+      } catch (parseErr) {
+        showError(`Unexpected response from server (HTTP ${resp.status}). Please try again.`);
+        return;
+      }
+
+      if (!resp.ok) {
+        const errMsg = data.error || `Request failed (HTTP ${resp.status})`;
+        showError(errMsg);
+        return;
+      }
+
+      const answer = (data.answer || "").trim();
+      if (!answer) {
+        showError("The AI returned an empty response. Please try again.");
+        return;
+      }
+
+      appendAssistantMsg(answer);
+
+      // Update rolling history
+      chatHistory.push({ role: "user",      content: question });
+      chatHistory.push({ role: "assistant", content: answer   });
+      if (chatHistory.length > MAX_HISTORY_TURNS * 2) {
+        chatHistory = chatHistory.slice(-MAX_HISTORY_TURNS * 2);
+      }
+
+    } catch (err) {
+      removeTyping(typingId);
+      if (err.name === "TimeoutError" || err.name === "AbortError") {
+        showError("Request timed out. Please try again.");
+      } else {
+        showError("Could not reach the AI assistant. Is the backend running?");
+      }
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Rendering helpers
+  // -------------------------------------------------------------------------
+  function appendUserMsg(text) {
+    const el = document.createElement("div");
+    el.className = "ai-msg ai-msg-user";
+    el.innerHTML = `
+      <div class="ai-msg-avatar">&#128100;</div>
+      <div class="ai-msg-body">
+        <div class="ai-msg-bubble">${escapeHtml(text)}</div>
+        <div class="ai-msg-timestamp">${nowTime()}</div>
+      </div>`;
+    msgBox.appendChild(el);
+    scrollToBottom();
+  }
+
+  function appendAssistantMsg(text) {
+    const el = document.createElement("div");
+    el.className = "ai-msg ai-msg-assistant";
+    el.innerHTML = `
+      <div class="ai-msg-avatar">&#129302;</div>
+      <div class="ai-msg-body">
+        <div class="ai-msg-bubble">${safeMarkdown(text)}</div>
+        <div class="ai-msg-timestamp">${nowTime()}</div>
+      </div>`;
+    msgBox.appendChild(el);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    const id = "ai-typing-" + Date.now();
+    const el = document.createElement("div");
+    el.className = "ai-msg ai-msg-assistant";
+    el.id = id;
+    el.innerHTML = `
+      <div class="ai-msg-avatar">&#129302;</div>
+      <div class="ai-msg-body">
+        <div class="ai-typing-bubble">
+          <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
+        </div>
+      </div>`;
+    msgBox.appendChild(el);
+    scrollToBottom();
+    return id;
+  }
+
+  function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+
+  function showError(msg) {
+    errorText.textContent = msg;
+    errorBan.style.display = "flex";
+  }
+
+  function hideError() { errorBan.style.display = "none"; }
+
+  function setRequesting(val) {
+    isRequesting = val;
+    sendBtn.disabled = val;
+    inputEl.disabled = val;
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(() => { msgBox.scrollTop = msgBox.scrollHeight; });
+  }
+
+  function nowTime() {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Safe HTML escape (prevents XSS from user messages)
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // Minimal safe Markdown renderer (no raw HTML injection)
+  function safeMarkdown(text) {
+    // Escape HTML first
+    let s = escapeHtml(text);
+    // Bold: **text**
+    s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // Italic: *text* or _text_
+    s = s.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+    s = s.replace(/_([^_\n]+?)_/g, "<em>$1</em>");
+    // Inline code: `code`
+    s = s.replace(/`([^`\n]+?)`/g, "<code>$1</code>");
+    // Bullet lists
+    s = s.replace(/^[*\-] (.+)$/gm, "<li>$1</li>");
+    s = s.replace(/(<li>.*<\/li>\n?)+/g, m => "<ul>" + m + "</ul>");
+    // Numbered lists
+    s = s.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+    // Paragraphs (double newline)
+    s = s.replace(/\n\n+/g, "</p><p>");
+    // Single newlines
+    s = s.replace(/\n/g, "<br>");
+    // Wrap
+    if (!s.startsWith("<p>") && !s.startsWith("<ul>") && !s.startsWith("<ol>")) {
+      s = "<p>" + s + "</p>";
+    }
+    return s;
+  }
+
+  // -------------------------------------------------------------------------
+  // Expose hook for app.js to set selected event ID for conjunction context
+  // -------------------------------------------------------------------------
+  window._setAiEventContext = function(eventId) {
+    window._aiSelectedEventId = eventId || null;
+  };
+
+})();
+</script>
 </body>
 </html>
+
+

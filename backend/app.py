@@ -1271,6 +1271,235 @@ def ml_predict_batch():
 # ---------------------------------------------------------------------------
 # Startup
 
+
+# ===========================================================================
+# AI Assistant Endpoints (Groq-powered)
+# ===========================================================================
+# Grounding context builder
+# ---------------------------------------------------------------------------
+
+def _build_grounding_context(
+    selected_norad_id=None,
+    selected_event_id=None,
+) -> str:
+    """
+    Assemble a factual context string from live backend data.
+    This is injected into the AI system prompt (never echoed to the user)
+    so the LLM can ground answers in real catalogue values.
+    """
+    lines = []
+
+    # 1. Catalogue summary
+    total = len(SATELLITES)
+    station_count = sum(1 for s in SATELLITES.values() if s["source"] == "stations")
+    active_count  = sum(1 for s in SATELLITES.values() if s["source"] == "active_satellites")
+    stale_count   = sum(1 for s in SATELLITES.values() if s.get("stale"))
+    err_count     = sum(1 for s in SATELLITES.values() if s.get("init_error"))
+    lines.append(
+        f"CATALOGUE SUMMARY: {total} total objects loaded "
+        f"({station_count} space stations, {active_count} active satellites). "
+        f"Stale TLE (>14 days): {stale_count}. Init errors: {err_count}."
+    )
+
+    # 2. Selected satellite details
+    if selected_norad_id is not None:
+        try:
+            nid = int(selected_norad_id)
+        except (TypeError, ValueError):
+            nid = None
+        if nid and nid in SATELLITES:
+            s = SATELLITES[nid]
+            lines.append(
+                f"SELECTED SATELLITE: {s['name']} (NORAD {nid}), "
+                f"Source: {s['source']}, "
+                f"Epoch: {s['epoch']} (age: {s.get('epoch_age_days', 'unknown')} days), "
+                f"Inclination: {s['inclination']}°, "
+                f"Eccentricity: {s['eccentricity']:.6f}, "
+                f"Mean Motion: {s['mean_motion']:.6f} rev/day, "
+                f"Period: {s.get('period_min', 'N/A')} min, "
+                f"Stale: {s.get('stale', False)}, "
+                f"Init error: {s.get('init_error', None)}."
+            )
+        else:
+            lines.append(f"SELECTED SATELLITE: NORAD ID {selected_norad_id} not found in catalogue.")
+
+    # 3. Last screening run summary
+    global _last_screening_run
+    if _last_screening_run is not None:
+        run = _last_screening_run
+        alert_count = sum(1 for a in run.alerts if a.screening_status == "ALERT")
+        lines.append(
+            f"LAST SCREENING RUN: {run.screening_epoch}, "
+            f"Horizon: {run.horizon_minutes} min, "
+            f"Threshold: {run.screening_threshold_km} km, "
+            f"Objects screened: {run.objects_screened}, "
+            f"Alerts: {alert_count}."
+        )
+        # Top 3 alerts by miss distance
+        real_alerts = [a for a in run.alerts if a.screening_status == "ALERT"]
+        real_alerts.sort(key=lambda a: a.miss_distance_km)
+        for i, a in enumerate(real_alerts[:3], 1):
+            lines.append(
+                f"  Alert {i}: {a.primary_name} (NORAD {a.primary_norad_id}) vs "
+                f"{a.secondary_name} (NORAD {a.secondary_norad_id}), "
+                f"Miss distance: {a.miss_distance_km:.3f} km, "
+                f"TCA: {a.tca_utc}, Event ID: {a.event_id}."
+            )
+        # Specific event if selected
+        if selected_event_id:
+            match = next(
+                (a for a in run.alerts if a.event_id == selected_event_id), None
+            )
+            if match:
+                lines.append(
+                    f"SELECTED EVENT ({selected_event_id}): "
+                    f"{match.primary_name} vs {match.secondary_name}, "
+                    f"Miss distance: {match.miss_distance_km:.3f} km, "
+                    f"Relative speed: {match.relative_speed_km_s:.3f} km/s, "
+                    f"TCA: {match.tca_utc}, Status: {match.screening_status}."
+                )
+            else:
+                lines.append(f"SELECTED EVENT {selected_event_id}: not found in last screening run.")
+    else:
+        lines.append("LAST SCREENING RUN: No screening run performed yet.")
+
+    # 4. ML model status
+    predictor = _get_ml_predictor()
+    if predictor and predictor.metadata:
+        meta = predictor.metadata
+        lines.append(
+            f"ML MODEL: version {meta.get('model_version', 'N/A')}, "
+            f"trained {meta.get('training_timestamp', 'unknown')}, "
+            f"action_threshold log10(P)={meta.get('action_threshold', -6.0)}, "
+            f"dataset: anonymized ESA Kelvins Collision Avoidance Challenge CDMs."
+        )
+    else:
+        lines.append("ML MODEL: Not loaded. Run backend/scripts/train_ml_risk.py to generate artifacts.")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# AI Routes
+# ---------------------------------------------------------------------------
+
+@app.route("/api/ai/status")
+def ai_status():
+    """Return provider, assistant name, and safe configuration status."""
+    try:
+        from ai_service import get_status
+    except ImportError:
+        from backend.ai_service import get_status
+    return jsonify(get_status()), 200
+
+
+@app.route("/api/ai/suggestions")
+def ai_suggestions():
+    """Return predefined suggested questions. Does not require Groq."""
+    try:
+        from ai_service import SUGGESTIONS
+    except ImportError:
+        from backend.ai_service import SUGGESTIONS
+    return jsonify({"suggestions": SUGGESTIONS}), 200
+
+
+@app.route("/api/ai/ask", methods=["POST"])
+def ai_ask():
+    """
+    POST /api/ai/ask
+
+    Body (JSON):
+    {
+      "question": str,                   // required, max 2000 chars
+      "history": [                       // optional, max 10 turns
+        {"role": "user"|"assistant", "content": str},
+        ...
+      ],
+      "selected_norad_id": int|null,     // optional selection context
+      "selected_event_id": str|null      // optional event context
+    }
+
+    Response:
+    {
+      "answer": str,
+      "sources": str,
+      "data_timestamp": str (UTC ISO),
+      "model": str,
+      "configured": bool
+    }
+
+    Error:
+    {
+      "error": str,      // user-facing message (no secrets)
+      "configured": bool
+    }
+    """
+    try:
+        from ai_service import (
+            ask, get_status, GroqServiceError,
+            _MAX_QUESTION_CHARS, _MAX_HISTORY_TURNS
+        )
+    except ImportError:
+        from backend.ai_service import (
+            ask, get_status, GroqServiceError,
+            _MAX_QUESTION_CHARS, _MAX_HISTORY_TURNS
+        )
+
+    # --- Input validation ---
+    if not request.is_json:
+        return jsonify({"error": "Request body must be JSON.", "configured": get_status()["configured"]}), 400
+
+    MAX_REQUEST_BYTES = 32_768
+    if request.content_length and request.content_length > MAX_REQUEST_BYTES:
+        return jsonify({"error": "Request body too large.", "configured": get_status()["configured"]}), 413
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "JSON payload must be an object.", "configured": get_status()["configured"]}), 400
+
+    question = payload.get("question", "")
+    if not isinstance(question, str) or not question.strip():
+        return jsonify({"error": "Question cannot be empty.", "configured": get_status()["configured"]}), 400
+
+    question = question.strip()[:_MAX_QUESTION_CHARS]
+
+    history = payload.get("history", [])
+    if not isinstance(history, list):
+        history = []
+
+    selected_norad_id = payload.get("selected_norad_id")
+    selected_event_id = payload.get("selected_event_id")
+
+    # Validate event_id is a known safe string (no injection risk from arbitrary content)
+    if selected_event_id is not None and not isinstance(selected_event_id, str):
+        selected_event_id = None
+    if selected_event_id:
+        selected_event_id = selected_event_id[:128]  # bounded
+
+    # --- Build grounding context from trusted backend sources ---
+    context = _build_grounding_context(
+        selected_norad_id=selected_norad_id,
+        selected_event_id=selected_event_id,
+    )
+
+    # --- Call Groq ---
+    try:
+        answer = ask(question=question, history=history, context=context)
+    except GroqServiceError as exc:
+        status_info = get_status()
+        return jsonify({
+            "error": str(exc),
+            "configured": status_info["configured"],
+        }), exc.http_status
+
+    return jsonify({
+        "answer": answer,
+        "sources": "Akash Setu backend catalogue + Groq LLM (general astrodynamics knowledge)",
+        "data_timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "model": get_status().get("model"),
+        "configured": get_status()["configured"],
+    }), 200
+
 # ---------------------------------------------------------------------------
 def main():
     print("=" * 60)
@@ -1296,6 +1525,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

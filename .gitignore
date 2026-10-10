@@ -1,2 +1,6 @@
 
 /data/raw/esa/Collision Avoidance Challenge - Dataset/
+
+# Environment secrets
+.env
+*.env.local
