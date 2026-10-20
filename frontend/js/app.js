@@ -1,13 +1,13 @@
-﻿/**
+/**
  * Akash Setu — 3D Satellite Tracking, Conjunction Screening & Avoidance Dashboard
  * ==============================================================================
  * Integrated 3D Earth, Orbit Trajectories, Conjunction Encounters,
  *          Nested Grid Refinements (0.01m), Avoidance Maneuver Planning,
  *          and ML Collision Risk Forecasting.
  *
- * Coordinate system:
- *   ECEF X -> Three.js +X  (0 lon, equator)
- *   ECEF Y -> Three.js +Z  (90E, equator)
+ * Coordinate system (Three.js r128 SphereGeometry UV mapping):
+ *   ECEF X -> Three.js +X  (lon 0°, equator)
+ *   ECEF Y -> Three.js -Z  (lon 90°E, equator)  ← sign is negative
  *   ECEF Z -> Three.js +Y  (north pole = up)
  *   Scale: 1 unit = 6371 km
  */
@@ -342,7 +342,9 @@ function animate() {
 }
 
 function ecefToThree(x, y, z) {
-    return new THREE.Vector3(x * SCALE, z * SCALE, y * SCALE);
+    // Three.js r128 SphereGeometry: lon 0° → +X, lon 90°E → -Z, North Pole → +Y
+    // ECEF: +X=lon0, +Y=lon90E, +Z=NorthPole  →  negate y for the z-slot
+    return new THREE.Vector3(x * SCALE, z * SCALE, -y * SCALE);
 }
 
 // ─── Data Loading ─────────────────────────────────────────────────────────────
@@ -453,7 +455,8 @@ function upsertOrbitLine(noradId, source, orbitPath, stale) {
         return ecefToThree(x, y, z);
     }).filter(v => isFinite(v.x) && isFinite(v.y) && isFinite(v.z));
     if (points.length < 2) return;
-    points.push(points[0].clone());
+    // Do NOT close the ground track: ECEF coords rotate with Earth, so a LEO
+    // satellite shifts ~22° west per orbit — the path is an open spiral, not a loop.
     const geo = new THREE.BufferGeometry().setFromPoints(points);
 
     if (orbitLines.has(noradId)) {
@@ -815,7 +818,8 @@ function renderManeuverTrajectory(orbitPathCoords, colorHex = 0x00f0ff) {
         opacity: 0.95
     });
 
-    activeManeuverLine = new THREE.LineLoop(geometry, material);
+    // Use Line, not LineLoop: the post-burn trajectory is an open arc, not a closed loop.
+    activeManeuverLine = new THREE.Line(geometry, material);
     scene.add(activeManeuverLine);
 
     if (points.length > 0) {
