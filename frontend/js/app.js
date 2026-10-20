@@ -24,12 +24,14 @@ const REFRESH_INTERVAL_MS  = 30000;
 const DEFAULT_SAT_LIMIT    = 300;   // batch propagation size
 const ORBIT_DISPLAY_LIMIT  = 300;   // how many active-sat orbits to pre-render
 
-const ORBIT_DIM_COLOR_SAT     = 0x2a5caa;  // normal active-sat orbit
-const ORBIT_DIM_COLOR_STATION = 0x00995a;  // normal station orbit
-const ORBIT_DIM_OPACITY       = 0.30;
-const ORBIT_SEL_COLOR_SAT     = 0x80c0ff;  // selected active-sat orbit
-const ORBIT_SEL_COLOR_STATION = 0x00ffaa;  // selected station orbit
-const ORBIT_SEL_OPACITY       = 0.90;
+const ORBIT_DIM_COLOR_SAT     = 0x1d4a85;  // subtle deep space blue
+const ORBIT_DIM_COLOR_STATION = 0x008f65;  // subtle station emerald
+const ORBIT_DIM_OPACITY       = 0.08;      // thin & non-intrusive to eliminate visual cage clutter
+const ORBIT_DIM_OPACITY_STATION = 0.22;    // stations clearly visible
+const ORBIT_UNSEL_DIMMED_OPACITY = 0.03;   // dimmed even further when a satellite is selected
+const ORBIT_SEL_COLOR_SAT     = 0x00f0ff;  // bright neon cyan for selected active sat
+const ORBIT_SEL_COLOR_STATION = 0x00ffa3;  // bright neon green for selected station
+const ORBIT_SEL_OPACITY       = 0.95;
 
 // Conjunction & Avoidance Colors
 const CONJUNCTION_COLOR_1     = 0xff3355;  // primary satellite orbit
@@ -99,8 +101,9 @@ function setupScene() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060913);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 100);
-    camera.position.set(0, 1.2, 3.2);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 500);
+    // Framed so Earth is clearly visible and centered with comfortable breathing room
+    camera.position.set(0.6, 1.4, 4.2);
 
     window.addEventListener('resize', onWindowResize);
 }
@@ -325,9 +328,12 @@ function buildLighting() {
 function buildControls() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 1.2;
-    controls.maxDistance = 12;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.85;
+    controls.zoomSpeed = 1.0;
+    controls.panSpeed = 0.8;
+    controls.minDistance = 1.35; // Prevents clipping through Earth (radius=1.0)
+    controls.maxDistance = 45.0; // Enables viewing high MEO, GEO (6.6 R_E), and HEO (up to 20 R_E) orbits
     controls.target.set(0, 0, 0);
 }
 
@@ -467,14 +473,15 @@ function upsertOrbitLine(noradId, source, orbitPath, stale) {
     }
 
     const col = isStation ? ORBIT_DIM_COLOR_STATION : ORBIT_DIM_COLOR_SAT;
+    const op = isStation ? ORBIT_DIM_OPACITY_STATION : ORBIT_DIM_OPACITY;
     const mat = new THREE.LineBasicMaterial({
         color: col,
         transparent: true,
-        opacity: ORBIT_DIM_OPACITY,
+        opacity: op,
         linewidth: 1
     });
     const line = new THREE.Line(geo, mat);
-    line.userData = { noradId, source, stale, originalColor: col, originalOpacity: ORBIT_DIM_OPACITY };
+    line.userData = { noradId, source, stale, originalColor: col, originalOpacity: op };
     line.frustumCulled = false; // prevent culling issues from bounding sphere anomalies
     scene.add(line);
     orbitLines.set(noradId, line);
@@ -518,20 +525,27 @@ function buildSatPoints() {
         // Fallback: bound sphere large enough for GEO orbit (≈7 units at this scale)
         geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 15);
     }
-    const mat = new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9 });
+    const mat = new THREE.PointsMaterial({ size: 3.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.8 });
     satPoints = new THREE.Points(geo, mat);
     satPoints.frustumCulled = false; // avoid culling issues from large bounding sphere
     scene.add(satPoints);
 }
 
 function highlightOrbit(noradId) {
-    resetOrbitHighlights();
-    const line = orbitLines.get(noradId);
-    if (!line) return;
-    const isStation = line.userData.source === 'stations';
-    line.material.color.setHex(isStation ? ORBIT_SEL_COLOR_STATION : ORBIT_SEL_COLOR_SAT);
-    line.material.opacity = ORBIT_SEL_OPACITY;
-    line.material.linewidth = 2;
+    orbitLines.forEach((line, id) => {
+        if (id === noradId) {
+            const isStation = line.userData.source === 'stations';
+            line.material.color.setHex(isStation ? ORBIT_SEL_COLOR_STATION : ORBIT_SEL_COLOR_SAT);
+            line.material.opacity = ORBIT_SEL_OPACITY;
+            line.material.linewidth = 2;
+            line.renderOrder = 999;
+        } else {
+            line.material.color.setHex(line.userData.originalColor);
+            line.material.opacity = ORBIT_UNSEL_DIMMED_OPACITY;
+            line.material.linewidth = 1;
+            line.renderOrder = 0;
+        }
+    });
 }
 
 function resetOrbitHighlights() {
@@ -539,6 +553,7 @@ function resetOrbitHighlights() {
         line.material.color.setHex(line.userData.originalColor);
         line.material.opacity = line.userData.originalOpacity;
         line.material.linewidth = 1;
+        line.renderOrder = 0;
     });
 }
 
@@ -551,8 +566,8 @@ async function selectSat(noradId) {
     if (pos && !pos.error) {
         const v = ecefToThree(pos.x, pos.y, pos.z);
         if (!selectedMarker) {
-            const geo = new THREE.SphereGeometry(0.022, 16, 16);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+            const geo = new THREE.SphereGeometry(0.035, 20, 20);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffe600 });
             selectedMarker = new THREE.Mesh(geo, mat);
             scene.add(selectedMarker);
         }
@@ -1302,7 +1317,7 @@ function setupUIListeners() {
     if (resetCamBtn) {
         resetCamBtn.addEventListener('click', () => {
             if (camera && controls) {
-                camera.position.set(0, 1.5, 3.2);
+                camera.position.set(0.6, 1.4, 4.2);
                 controls.target.set(0, 0, 0);
                 controls.update();
             }
