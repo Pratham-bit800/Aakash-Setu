@@ -13,51 +13,51 @@
  */
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_BASE             = (window.location.protocol === 'file:' || 
-    (window.location.hostname === 'localhost' && window.location.port !== '5000') || 
+const API_BASE = (window.location.protocol === 'file:' ||
+    (window.location.hostname === 'localhost' && window.location.port !== '5000') ||
     (window.location.hostname === '127.0.0.1' && window.location.port !== '5000'))
     ? 'http://127.0.0.1:5000'
     : '';
-const EARTH_RADIUS_KM      = 6371;
-const SCALE                = 1 / EARTH_RADIUS_KM;
-const REFRESH_INTERVAL_MS  = 30000;
-const DEFAULT_SAT_LIMIT    = 300;   // batch propagation size
-const ORBIT_DISPLAY_LIMIT  = 300;   // how many active-sat orbits to pre-render
+const EARTH_RADIUS_KM = 6371;
+const SCALE = 1 / EARTH_RADIUS_KM;
+const REFRESH_INTERVAL_MS = 30000;
+const DEFAULT_SAT_LIMIT = 300;   // batch propagation size
+const ORBIT_DISPLAY_LIMIT = 300;   // how many active-sat orbits to pre-render
 
-const ORBIT_DIM_COLOR_SAT     = 0x1d4a85;  // subtle deep space blue
-const ORBIT_DIM_COLOR_STATION = 0x008f65;  // subtle station emerald
-const ORBIT_DIM_OPACITY       = 0.08;      // thin & non-intrusive to eliminate visual cage clutter
-const ORBIT_DIM_OPACITY_STATION = 0.22;    // stations clearly visible
-const ORBIT_UNSEL_DIMMED_OPACITY = 0.03;   // dimmed even further when a satellite is selected
-const ORBIT_SEL_COLOR_SAT     = 0x00f0ff;  // bright neon cyan for selected active sat
-const ORBIT_SEL_COLOR_STATION = 0x00ffa3;  // bright neon green for selected station
-const ORBIT_SEL_OPACITY       = 0.95;
+const ORBIT_DIM_COLOR_SAT     = 0x4588e6;  // crisp, vivid celestial blue
+const ORBIT_DIM_COLOR_STATION = 0x00e5a0;  // crisp, vivid station emerald
+const ORBIT_DIM_OPACITY       = 0.35;      // clear, sharp & distinct (no faint blur/ghosting)
+const ORBIT_DIM_OPACITY_STATION = 0.65;    // space stations prominently visible
+const ORBIT_UNSEL_DIMMED_OPACITY = 0.15;   // subtle context when a satellite is selected
+const ORBIT_SEL_COLOR_SAT     = 0x00ffff;  // razor-sharp brilliant cyan for selected sat
+const ORBIT_SEL_COLOR_STATION = 0x00ffa8;  // razor-sharp brilliant emerald for selected station
+const ORBIT_SEL_OPACITY       = 1.0;       // 100% solid, fully crisp selected orbit
 
 // Conjunction & Avoidance Colors
-const CONJUNCTION_COLOR_1     = 0xff3355;  // primary satellite orbit
-const CONJUNCTION_COLOR_2     = 0xffaa22;  // secondary satellite orbit
-const MANEUVER_ORBIT_COLOR    = 0x00ffff;  // post-burn maneuver trajectory (cyan)
+const CONJUNCTION_COLOR_1 = 0xff3355;  // primary satellite orbit
+const CONJUNCTION_COLOR_2 = 0xffaa22;  // secondary satellite orbit
+const MANEUVER_ORBIT_COLOR = 0x00ffff;  // post-burn maneuver trajectory (cyan)
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let scene, camera, renderer, controls;
 let earthMesh, atmosphereMesh;
-let satPoints          = null;        // Points object for all satellite positions
-let orbitLines         = new Map();   // norad_id -> THREE.Line (persistent)
-let selectedMarker     = null;        // pulsing sphere for the selected satellite
-let conjunctionLines   = [];          // highlighted conjunction lines
-let conjunctionMarker  = null;        // 3D group for conjunction encounter marker
-let maneuverOrbitLine  = null;        // 3D line for post-burn maneuver trajectory
+let satPoints = null;        // Points object for all satellite positions
+let orbitLines = new Map();   // norad_id -> THREE.Line (persistent)
+let selectedMarker = null;        // pulsing sphere for the selected satellite
+let conjunctionLines = [];          // highlighted conjunction lines
+let conjunctionMarker = null;        // 3D group for conjunction encounter marker
+let maneuverOrbitLine = null;        // 3D line for post-burn maneuver trajectory
 
-let satellites         = [];          // metadata from /api/satellites
-let positions          = [];          // current ECEF positions from /api/propagate
-let selectedNoradId    = null;
-let currentMode        = 'tracker';   // 'tracker', 'screening', 'avoidance', 'ml_risk'
-let activeAlertData    = null;        // selected conjunction alert
-let searchQuery        = '';
-let sourceFilter       = 'all';
-let refreshTimer       = null;
-let raycaster          = new THREE.Raycaster();
-let mouse              = new THREE.Vector2();
+let satellites = [];          // metadata from /api/satellites
+let positions = [];          // current ECEF positions from /api/propagate
+let selectedNoradId = null;
+let currentMode = 'tracker';   // 'tracker', 'screening', 'avoidance', 'ml_risk'
+let activeAlertData = null;        // selected conjunction alert
+let searchQuery = '';
+let sourceFilter = 'all';
+let refreshTimer = null;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
 
 // ─── Initialization ───────────────────────────────────────────────────────────
 async function init() {
@@ -95,14 +95,13 @@ function setupScene() {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
+    renderer.toneMapping = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = 1.0;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060913);
 
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 500);
-    // Framed so Earth is clearly visible and centered with comfortable breathing room
     camera.position.set(0.6, 1.4, 4.2);
 
     window.addEventListener('resize', onWindowResize);
@@ -142,22 +141,22 @@ function buildEarth() {
 
         // ocean shimmer rows
         for (let r = 0; r < H; r++) {
-            const v = Math.sin(r/H*Math.PI*18)*0.014 + Math.cos(r/H*Math.PI*9)*0.009;
+            const v = Math.sin(r / H * Math.PI * 18) * 0.014 + Math.cos(r / H * Math.PI * 9) * 0.009;
             if (Math.abs(v) > 0.003) {
-                ctx.fillStyle = v > 0 ? `rgba(30,90,180,${v*0.22})` : `rgba(2,10,30,${-v*0.18})`;
+                ctx.fillStyle = v > 0 ? `rgba(30,90,180,${v * 0.22})` : `rgba(2,10,30,${-v * 0.18})`;
                 ctx.fillRect(0, r, W, 1);
             }
         }
 
-        function px(lon, lat) { return { x:(lon+180)/360*W, y:(90-lat)/180*H }; }
+        function px(lon, lat) { return { x: (lon + 180) / 360 * W, y: (90 - lat) / 180 * H }; }
         function ell(cLon, cLat, rLon, rLat, color, n) {
-            n = n||48;
+            n = n || 48;
             ctx.beginPath();
-            const first = px(cLon+rLon, cLat);
+            const first = px(cLon + rLon, cLat);
             ctx.moveTo(first.x, first.y);
-            for (let i=1; i<=n; i++) {
-                const a = i/n*Math.PI*2;
-                const p = px(cLon+rLon*Math.cos(a), cLat+rLat*Math.sin(a));
+            for (let i = 1; i <= n; i++) {
+                const a = i / n * Math.PI * 2;
+                const p = px(cLon + rLon * Math.cos(a), cLat + rLat * Math.sin(a));
                 ctx.lineTo(p.x, p.y);
             }
             ctx.closePath();
@@ -166,48 +165,48 @@ function buildEarth() {
         }
 
         // continents
-        ell(22,4,27,37,'#2e5518'); ell(22,4,25,35,'#3d6222');
-        ell(18,20,15,9,'#7e6232'); ell(22,26,16,8,'#8c7240');
-        ell(15,53,25,17,'#2c4a1a'); ell(15,54,23,15,'#3e5a28');
-        ell(80,47,67,29,'#263c18'); ell(80,47,65,27,'#3a5620');
-        ell(56,25,13,9,'#b8a268'); ell(90,42,22,11,'#8c8462');
-        ell(106,23,11,8,'#4c6e2a'); ell(138,36,7,7,'#3a5620');
-        ell(78,30,11,7,'#7e8c72');
-        ell(-98,47,41,27,'#273c18'); ell(-98,47,39,25,'#3c5620');
-        ell(-110,40,15,11,'#7c6a42'); ell(-108,34,11,9,'#a47c4a');
-        ell(-58,-12,22,35,'#2e6020'); ell(-58,-12,20,33,'#3c6628');
-        ell(-66,-22,8,7,'#6c7244'); ell(-66,-38,7,9,'#5c6244');
-        ell(134,-26,22,15,'#6c4c22'); ell(134,-26,20,13,'#8c6232');
-        ell(148,-30,6,6,'#4c6228');
-        ell(-42,72,19,13,'#ccdcec'); ell(-42,72,17,11,'#dde8f4');
-        ctx.fillStyle='#c4d8e8';
-        ctx.fillRect(0,H*0.84,W,H*0.16);
+        ell(22, 4, 27, 37, '#2e5518'); ell(22, 4, 25, 35, '#3d6222');
+        ell(18, 20, 15, 9, '#7e6232'); ell(22, 26, 16, 8, '#8c7240');
+        ell(15, 53, 25, 17, '#2c4a1a'); ell(15, 54, 23, 15, '#3e5a28');
+        ell(80, 47, 67, 29, '#263c18'); ell(80, 47, 65, 27, '#3a5620');
+        ell(56, 25, 13, 9, '#b8a268'); ell(90, 42, 22, 11, '#8c8462');
+        ell(106, 23, 11, 8, '#4c6e2a'); ell(138, 36, 7, 7, '#3a5620');
+        ell(78, 30, 11, 7, '#7e8c72');
+        ell(-98, 47, 41, 27, '#273c18'); ell(-98, 47, 39, 25, '#3c5620');
+        ell(-110, 40, 15, 11, '#7c6a42'); ell(-108, 34, 11, 9, '#a47c4a');
+        ell(-58, -12, 22, 35, '#2e6020'); ell(-58, -12, 20, 33, '#3c6628');
+        ell(-66, -22, 8, 7, '#6c7244'); ell(-66, -38, 7, 9, '#5c6244');
+        ell(134, -26, 22, 15, '#6c4c22'); ell(134, -26, 20, 13, '#8c6232');
+        ell(148, -30, 6, 6, '#4c6228');
+        ell(-42, 72, 19, 13, '#ccdcec'); ell(-42, 72, 17, 11, '#dde8f4');
+        ctx.fillStyle = '#c4d8e8';
+        ctx.fillRect(0, H * 0.84, W, H * 0.16);
 
         // polar caps
-        let g = ctx.createRadialGradient(W/2,0,0,W/2,0,H*0.14);
-        g.addColorStop(0,'rgba(228,242,255,0.97)'); g.addColorStop(1,'rgba(200,225,248,0)');
-        ctx.fillStyle=g; ctx.fillRect(0,0,W,H*0.18);
-        g = ctx.createRadialGradient(W/2,H,0,W/2,H,H*0.15);
-        g.addColorStop(0,'rgba(228,242,255,0.99)'); g.addColorStop(1,'rgba(200,225,248,0)');
-        ctx.fillStyle=g; ctx.fillRect(0,H*0.83,W,H*0.17);
+        let g = ctx.createRadialGradient(W / 2, 0, 0, W / 2, 0, H * 0.14);
+        g.addColorStop(0, 'rgba(228,242,255,0.97)'); g.addColorStop(1, 'rgba(200,225,248,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * 0.18);
+        g = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, H * 0.15);
+        g.addColorStop(0, 'rgba(228,242,255,0.99)'); g.addColorStop(1, 'rgba(200,225,248,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, H * 0.83, W, H * 0.17);
 
         // clouds
         ctx.globalAlpha = 0.42;
         let s = 137;
-        function rng(){ s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; }
-        for (let i=0;i<120;i++){
-            const cy=rng()*H, cx=rng()*W, cw=50+rng()*200, ch=10+rng()*28;
-            const lat=90-(cy/H)*180;
-            if(rng()>0.45+0.45*Math.abs(Math.sin(lat*Math.PI/90))) continue;
-            const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,cw*0.6);
-            cg.addColorStop(0,'rgba(255,255,255,0.78)');
-            cg.addColorStop(0.5,'rgba(240,248,255,0.32)');
-            cg.addColorStop(1,'rgba(240,248,255,0)');
-            ctx.save(); ctx.scale(1,ch/(cw*0.6));
-            ctx.beginPath(); ctx.arc(cx,cy*(cw*0.6)/ch,cw*0.6,0,Math.PI*2);
-            ctx.fillStyle=cg; ctx.fill(); ctx.restore();
+        function rng() { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; }
+        for (let i = 0; i < 120; i++) {
+            const cy = rng() * H, cx = rng() * W, cw = 50 + rng() * 200, ch = 10 + rng() * 28;
+            const lat = 90 - (cy / H) * 180;
+            if (rng() > 0.45 + 0.45 * Math.abs(Math.sin(lat * Math.PI / 90))) continue;
+            const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cw * 0.6);
+            cg.addColorStop(0, 'rgba(255,255,255,0.78)');
+            cg.addColorStop(0.5, 'rgba(240,248,255,0.32)');
+            cg.addColorStop(1, 'rgba(240,248,255,0)');
+            ctx.save(); ctx.scale(1, ch / (cw * 0.6));
+            ctx.beginPath(); ctx.arc(cx, cy * (cw * 0.6) / ch, cw * 0.6, 0, Math.PI * 2);
+            ctx.fillStyle = cg; ctx.fill(); ctx.restore();
         }
-        ctx.globalAlpha=1;
+        ctx.globalAlpha = 1;
         return c;
     }
 
@@ -215,28 +214,28 @@ function buildEarth() {
     // Specular map (ocean shiny, land matte, ice semi-shiny)
     // ------------------------------------------------------------------
     function makeSpecularMap() {
-        const W=2048,H=1024;
-        const c=document.createElement('canvas'); c.width=W; c.height=H;
-        const ctx=c.getContext('2d');
-        ctx.fillStyle='#5a7080'; ctx.fillRect(0,0,W,H); // ocean shiny
-        function px(lon,lat){return{x:(lon+180)/360*W,y:(90-lat)/180*H};}
-        function ell(cLon,cLat,rLon,rLat,n){
-            n=n||48;
+        const W = 2048, H = 1024;
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#5a7080'; ctx.fillRect(0, 0, W, H); // ocean shiny
+        function px(lon, lat) { return { x: (lon + 180) / 360 * W, y: (90 - lat) / 180 * H }; }
+        function ell(cLon, cLat, rLon, rLat, n) {
+            n = n || 48;
             ctx.beginPath();
-            const first=px(cLon+rLon,cLat); ctx.moveTo(first.x,first.y);
-            for(let i=1;i<=n;i++){const a=i/n*Math.PI*2;const p=px(cLon+rLon*Math.cos(a),cLat+rLat*Math.sin(a));ctx.lineTo(p.x,p.y);}
-            ctx.closePath(); ctx.fillStyle='#080808'; ctx.fill();
+            const first = px(cLon + rLon, cLat); ctx.moveTo(first.x, first.y);
+            for (let i = 1; i <= n; i++) { const a = i / n * Math.PI * 2; const p = px(cLon + rLon * Math.cos(a), cLat + rLat * Math.sin(a)); ctx.lineTo(p.x, p.y); }
+            ctx.closePath(); ctx.fillStyle = '#080808'; ctx.fill();
         }
-        ell(22,4,25,35); ell(15,54,23,15); ell(80,47,65,27);
-        ell(56,25,13,9); ell(-98,47,39,25); ell(-58,-12,20,33);
-        ell(134,-26,20,13); ell(-42,72,17,11);
-        ctx.fillStyle='#080808'; ctx.fillRect(0,H*0.84,W,H*0.16);
-        let g=ctx.createRadialGradient(W/2,0,0,W/2,0,H*0.14);
-        g.addColorStop(0,'rgba(170,190,210,1)'); g.addColorStop(1,'rgba(170,190,210,0)');
-        ctx.fillStyle=g; ctx.fillRect(0,0,W,H*0.18);
-        g=ctx.createRadialGradient(W/2,H,0,W/2,H,H*0.15);
-        g.addColorStop(0,'rgba(170,190,210,1)'); g.addColorStop(1,'rgba(170,190,210,0)');
-        ctx.fillStyle=g; ctx.fillRect(0,H*0.83,W,H*0.17);
+        ell(22, 4, 25, 35); ell(15, 54, 23, 15); ell(80, 47, 65, 27);
+        ell(56, 25, 13, 9); ell(-98, 47, 39, 25); ell(-58, -12, 20, 33);
+        ell(134, -26, 20, 13); ell(-42, 72, 17, 11);
+        ctx.fillStyle = '#080808'; ctx.fillRect(0, H * 0.84, W, H * 0.16);
+        let g = ctx.createRadialGradient(W / 2, 0, 0, W / 2, 0, H * 0.14);
+        g.addColorStop(0, 'rgba(170,190,210,1)'); g.addColorStop(1, 'rgba(170,190,210,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * 0.18);
+        g = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, H * 0.15);
+        g.addColorStop(0, 'rgba(170,190,210,1)'); g.addColorStop(1, 'rgba(170,190,210,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, H * 0.83, W, H * 0.17);
         return c;
     }
 
@@ -244,16 +243,16 @@ function buildEarth() {
     // Build initial material with procedural texture
     // ------------------------------------------------------------------
     const aniso = renderer.capabilities.getMaxAnisotropy();
-    const procTex  = new THREE.CanvasTexture(makeProceduralTexture());
+    const procTex = new THREE.CanvasTexture(makeProceduralTexture());
     procTex.anisotropy = aniso;
-    const specTex   = new THREE.CanvasTexture(makeSpecularMap());
+    const specTex = new THREE.CanvasTexture(makeSpecularMap());
 
     const mat = new THREE.MeshPhongMaterial({
-        map:          procTex,
-        specularMap:  specTex,
-        specular:     new THREE.Color(0x6699cc),
-        shininess:    80,
-        emissive:     new THREE.Color(0x020810),
+        map: procTex,
+        specularMap: specTex,
+        specular: new THREE.Color(0x335577),
+        shininess: 35,
+        emissive: new THREE.Color(0x020810),
         emissiveIntensity: 1.0,
     });
 
@@ -277,14 +276,14 @@ function buildEarth() {
         loader.crossOrigin = 'anonymous';
         loader.load(
             urls[0],
-            function(tex) {            // success
+            function (tex) {            // success
                 tex.anisotropy = aniso;
                 mat.map = tex;
                 mat.needsUpdate = true;
                 procTex.dispose();     // free memory
             },
             undefined,
-            function() {               // error → try next
+            function () {               // error → try next
                 tryLoad(urls.slice(1));
             }
         );
@@ -303,9 +302,9 @@ function buildStars() {
         const r = 40 + Math.random() * 40;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
-        pos[i]   = r * Math.sin(phi) * Math.cos(theta);
-        pos[i+1] = r * Math.cos(phi);
-        pos[i+2] = r * Math.sin(phi) * Math.sin(theta);
+        pos[i] = r * Math.sin(phi) * Math.cos(theta);
+        pos[i + 1] = r * Math.cos(phi);
+        pos[i + 2] = r * Math.sin(phi) * Math.sin(theta);
     }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({ color: 0x88aacc, size: 0.15, transparent: true, opacity: 0.7 });
@@ -313,14 +312,14 @@ function buildStars() {
 }
 
 function buildLighting() {
-    // Soft dark-blue ambient so night side is very dark (matches reference)
-    scene.add(new THREE.AmbientLight(0x12233a, 0.55));
-    // Sun: warm-white, high intensity for strong day-side illumination
-    const sun = new THREE.DirectionalLight(0xfff5e8, 3.0);
+    // Soft dark-blue ambient so night side is dark but visible
+    scene.add(new THREE.AmbientLight(0x142844, 0.6));
+    // Sun: balanced warm-white so continents are crisp without specular washout
+    const sun = new THREE.DirectionalLight(0xfff5e8, 2.0);
     sun.position.set(5, 2, 4);
     scene.add(sun);
-    // Subtle earthshine: very dim cold blue on the night hemisphere
-    const fill = new THREE.DirectionalLight(0x1a3a8a, 0.18);
+    // Subtle earthshine: dim cold blue on night hemisphere
+    const fill = new THREE.DirectionalLight(0x1a3a8a, 0.22);
     fill.position.set(-5, -1, -3);
     scene.add(fill);
 }
@@ -332,8 +331,8 @@ function buildControls() {
     controls.rotateSpeed = 0.85;
     controls.zoomSpeed = 1.0;
     controls.panSpeed = 0.8;
-    controls.minDistance = 1.35; // Prevents clipping through Earth (radius=1.0)
-    controls.maxDistance = 45.0; // Enables viewing high MEO, GEO (6.6 R_E), and HEO (up to 20 R_E) orbits
+    controls.minDistance = 1.35; // Safe distance above Earth surface (radius=1.0)
+    controls.maxDistance = 45.0; // View high MEO, GEO (6.6 R_E), and HEO (up to 20 R_E) orbits
     controls.target.set(0, 0, 0);
 }
 
@@ -496,16 +495,16 @@ function buildSatPoints() {
     for (let i = 0; i < count; i++) {
         const p = valid[i];
         const v = ecefToThree(p.x, p.y, p.z);
-        pos[i*3]   = v.x;
-        pos[i*3+1] = v.y;
-        pos[i*3+2] = v.z;
+        pos[i * 3] = v.x;
+        pos[i * 3 + 1] = v.y;
+        pos[i * 3 + 2] = v.z;
 
         if (p.norad_id === selectedNoradId) {
-            col[i*3] = 1.0; col[i*3+1] = 0.9; col[i*3+2] = 0.2;
+            col[i * 3] = 1.0; col[i * 3 + 1] = 0.95; col[i * 3 + 2] = 0.1;
         } else if (p.source === 'stations') {
-            col[i*3] = 0.0; col[i*3+1] = 0.9; col[i*3+2] = 0.6;
+            col[i * 3] = 0.0; col[i * 3 + 1] = 0.95; col[i * 3 + 2] = 0.65;
         } else {
-            col[i*3] = 0.35; col[i*3+1] = 0.65; col[i*3+2] = 1.0;
+            col[i * 3] = 0.45; col[i * 3 + 1] = 0.75; col[i * 3 + 2] = 1.0;
         }
     }
 
@@ -525,7 +524,7 @@ function buildSatPoints() {
         // Fallback: bound sphere large enough for GEO orbit (≈7 units at this scale)
         geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 15);
     }
-    const mat = new THREE.PointsMaterial({ size: 3.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.8 });
+    const mat = new THREE.PointsMaterial({ size: 3.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.85 });
     satPoints = new THREE.Points(geo, mat);
     satPoints.frustumCulled = false; // avoid culling issues from large bounding sphere
     scene.add(satPoints);
@@ -632,7 +631,7 @@ async function runScreening() {
         const data = await res.json();
 
         const alerts = data.alerts || [];
-        statusEl.innerHTML = `✅ Run Complete: Screened <strong>${data.total_pairs_screened || (limit*(limit-1)/2)}</strong> pairs. Found <strong>${alerts.length}</strong> close-approach alerts.`;
+        statusEl.innerHTML = `✅ Run Complete: Screened <strong>${data.total_pairs_screened || (limit * (limit - 1) / 2)}</strong> pairs. Found <strong>${alerts.length}</strong> close-approach alerts.`;
 
         if (alerts.length === 0) {
             listEl.innerHTML = '<div class="empty-state">No close approaches detected within threshold. Try increasing threshold km.</div>';
@@ -658,7 +657,7 @@ async function runScreening() {
                     <span>Rel Speed: ${(alert.relative_speed_km_s || 0).toFixed(1)} km/s</span>
                 </div>
                 <div class="alert-meta" style="font-size:10px;">
-                    <span>TCA: ${alert.tca_utc ? alert.tca_utc.replace('T', ' ').substring(0, 19) : 'T+'+alert.tca_minutes_from_start.toFixed(1)+'m'}</span>
+                    <span>TCA: ${alert.tca_utc ? alert.tca_utc.replace('T', ' ').substring(0, 19) : 'T+' + alert.tca_minutes_from_start.toFixed(1) + 'm'}</span>
                     <span style="color:var(--accent);font-weight:600;">View in 3D ➔</span>
                 </div>
             `;
@@ -940,7 +939,7 @@ async function planAvoidanceManeuver(customNoradA = null, customNoradB = null) {
                             <div class="candidate-metric-val">${(typeof leadTime === 'number' ? leadTime.toFixed(1) : leadTime)} min</div>
                         </div>
                     </div>
-                    ${cand.feasibility_reasons && cand.feasibility_reasons.length ? `<div class="candidate-reasons">${cand.feasibility_reasons.slice(0,1).join('')}</div>` : ''}
+                    ${cand.feasibility_reasons && cand.feasibility_reasons.length ? `<div class="candidate-reasons">${cand.feasibility_reasons.slice(0, 1).join('')}</div>` : ''}
                     <button class="action-btn btn-secondary" style="font-size:11px; padding:5px 8px; margin-top:2px;"
                             onclick="visualizeCandidateTrajectory('${noradA}', '${dir}', ${cand.delta_v_m_s})">
                         ↗ Show Post-Burn 3D Trajectory

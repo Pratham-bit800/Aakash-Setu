@@ -206,11 +206,6 @@ def _compute_orbit_path(sat_data, jd, jd_frac, steps=90):
     # Limit to 1 orbit or 24h max
     duration_min = min(period_min, 1440.0)
     dt_min = duration_min / steps
-    # Use the base epoch GMST so the orbit represents the instantaneous
-    # inertial Keplerian ellipse projected into the Earth reference frame at the current epoch.
-    # Evaluating time-varying GMST(t_i) rotates the coordinate frame with Earth during propagation,
-    # distorting high MEO/HEO orbits into 85,000 km corkscrew ground tracks.
-    gmst_base = _greenwich_sidereal_angle(jd, jd_frac)
     points = []
     for i in range(steps + 1):
         t = i * dt_min
@@ -218,10 +213,11 @@ def _compute_orbit_path(sat_data, jd, jd_frac, steps=90):
         frac = jd_frac + t / 1440.0
         jd_i = jd + int(frac)
         frac_i = frac - int(frac)
+        gmst = _greenwich_sidereal_angle(jd_i, frac_i)
         e, r, v = satrec.sgp4(jd_i, frac_i)
         if e != 0:
             continue
-        x, y, z = _teme_to_ecef(r[0], r[1], r[2], gmst_base)
+        x, y, z = _teme_to_ecef(r[0], r[1], r[2], gmst)
         points.append({"x": round(x, 2), "y": round(y, 2), "z": round(z, 2)})
     return points
 
@@ -1116,14 +1112,14 @@ def avoidance_trajectory():
 
     period = s.get("period_min") or 92.0
     orbit_path = []
-    gmst_base = _greenwich_sidereal_angle(jd0, jdf0)
     for i in range(steps):
         t_step = i * (period / steps)
         t_dt = dt + timedelta(minutes=t_step)
         jd_i, jdf_i = _epoch_to_jd(t_dt.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+        gmst_i = _greenwich_sidereal_angle(jd_i, jdf_i)
         err, pos, _ = man_rec.sgp4(jd_i, jdf_i)
         if err == 0:
-            ecef = _teme_to_ecef(pos[0], pos[1], pos[2], gmst_base)
+            ecef = _teme_to_ecef(pos[0], pos[1], pos[2], gmst_i)
             orbit_path.append([round(c, 3) for c in ecef])
 
     return jsonify({
