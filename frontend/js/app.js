@@ -24,14 +24,12 @@ const REFRESH_INTERVAL_MS = 30000;
 const DEFAULT_SAT_LIMIT = 300;   // batch propagation size
 const ORBIT_DISPLAY_LIMIT = 300;   // how many active-sat orbits to pre-render
 
-const ORBIT_DIM_COLOR_SAT     = 0x4588e6;  // crisp, vivid celestial blue
-const ORBIT_DIM_COLOR_STATION = 0x00e5a0;  // crisp, vivid station emerald
-const ORBIT_DIM_OPACITY       = 0.35;      // clear, sharp & distinct (no faint blur/ghosting)
-const ORBIT_DIM_OPACITY_STATION = 0.65;    // space stations prominently visible
-const ORBIT_UNSEL_DIMMED_OPACITY = 0.15;   // subtle context when a satellite is selected
-const ORBIT_SEL_COLOR_SAT     = 0x00ffff;  // razor-sharp brilliant cyan for selected sat
-const ORBIT_SEL_COLOR_STATION = 0x00ffa8;  // razor-sharp brilliant emerald for selected station
-const ORBIT_SEL_OPACITY       = 1.0;       // 100% solid, fully crisp selected orbit
+const ORBIT_DIM_COLOR_SAT = 0x2a5caa;  // normal active-sat orbit
+const ORBIT_DIM_COLOR_STATION = 0x00995a;  // normal station orbit
+const ORBIT_DIM_OPACITY = 0.30;
+const ORBIT_SEL_COLOR_SAT = 0x80c0ff;  // selected active-sat orbit
+const ORBIT_SEL_COLOR_STATION = 0x00ffaa;  // selected station orbit
+const ORBIT_SEL_OPACITY = 0.90;
 
 // Conjunction & Avoidance Colors
 const CONJUNCTION_COLOR_1 = 0xff3355;  // primary satellite orbit
@@ -95,14 +93,14 @@ function setupScene() {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.toneMapping = THREE.LinearToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x060913);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 500);
-    camera.position.set(0.6, 1.4, 4.2);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 100);
+    camera.position.set(0, 1.2, 3.2);
 
     window.addEventListener('resize', onWindowResize);
 }
@@ -250,8 +248,8 @@ function buildEarth() {
     const mat = new THREE.MeshPhongMaterial({
         map: procTex,
         specularMap: specTex,
-        specular: new THREE.Color(0x335577),
-        shininess: 35,
+        specular: new THREE.Color(0x6699cc),
+        shininess: 80,
         emissive: new THREE.Color(0x020810),
         emissiveIntensity: 1.0,
     });
@@ -312,14 +310,14 @@ function buildStars() {
 }
 
 function buildLighting() {
-    // Soft dark-blue ambient so night side is dark but visible
-    scene.add(new THREE.AmbientLight(0x142844, 0.6));
-    // Sun: balanced warm-white so continents are crisp without specular washout
-    const sun = new THREE.DirectionalLight(0xfff5e8, 2.0);
+    // Soft dark-blue ambient so night side is very dark (matches reference)
+    scene.add(new THREE.AmbientLight(0x12233a, 0.55));
+    // Sun: warm-white, high intensity for strong day-side illumination
+    const sun = new THREE.DirectionalLight(0xfff5e8, 3.0);
     sun.position.set(5, 2, 4);
     scene.add(sun);
-    // Subtle earthshine: dim cold blue on night hemisphere
-    const fill = new THREE.DirectionalLight(0x1a3a8a, 0.22);
+    // Subtle earthshine: very dim cold blue on the night hemisphere
+    const fill = new THREE.DirectionalLight(0x1a3a8a, 0.18);
     fill.position.set(-5, -1, -3);
     scene.add(fill);
 }
@@ -327,12 +325,9 @@ function buildLighting() {
 function buildControls() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.rotateSpeed = 0.85;
-    controls.zoomSpeed = 1.0;
-    controls.panSpeed = 0.8;
-    controls.minDistance = 1.35; // Safe distance above Earth surface (radius=1.0)
-    controls.maxDistance = 45.0; // View high MEO, GEO (6.6 R_E), and HEO (up to 20 R_E) orbits
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 12;
     controls.target.set(0, 0, 0);
 }
 
@@ -472,15 +467,14 @@ function upsertOrbitLine(noradId, source, orbitPath, stale) {
     }
 
     const col = isStation ? ORBIT_DIM_COLOR_STATION : ORBIT_DIM_COLOR_SAT;
-    const op = isStation ? ORBIT_DIM_OPACITY_STATION : ORBIT_DIM_OPACITY;
     const mat = new THREE.LineBasicMaterial({
         color: col,
         transparent: true,
-        opacity: op,
+        opacity: ORBIT_DIM_OPACITY,
         linewidth: 1
     });
     const line = new THREE.Line(geo, mat);
-    line.userData = { noradId, source, stale, originalColor: col, originalOpacity: op };
+    line.userData = { noradId, source, stale, originalColor: col, originalOpacity: ORBIT_DIM_OPACITY };
     line.frustumCulled = false; // prevent culling issues from bounding sphere anomalies
     scene.add(line);
     orbitLines.set(noradId, line);
@@ -500,11 +494,11 @@ function buildSatPoints() {
         pos[i * 3 + 2] = v.z;
 
         if (p.norad_id === selectedNoradId) {
-            col[i * 3] = 1.0; col[i * 3 + 1] = 0.95; col[i * 3 + 2] = 0.1;
+            col[i * 3] = 1.0; col[i * 3 + 1] = 0.9; col[i * 3 + 2] = 0.2;
         } else if (p.source === 'stations') {
-            col[i * 3] = 0.0; col[i * 3 + 1] = 0.95; col[i * 3 + 2] = 0.65;
+            col[i * 3] = 0.0; col[i * 3 + 1] = 0.9; col[i * 3 + 2] = 0.6;
         } else {
-            col[i * 3] = 0.45; col[i * 3 + 1] = 0.75; col[i * 3 + 2] = 1.0;
+            col[i * 3] = 0.35; col[i * 3 + 1] = 0.65; col[i * 3 + 2] = 1.0;
         }
     }
 
@@ -524,27 +518,20 @@ function buildSatPoints() {
         // Fallback: bound sphere large enough for GEO orbit (≈7 units at this scale)
         geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 15);
     }
-    const mat = new THREE.PointsMaterial({ size: 3.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.85 });
+    const mat = new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9 });
     satPoints = new THREE.Points(geo, mat);
     satPoints.frustumCulled = false; // avoid culling issues from large bounding sphere
     scene.add(satPoints);
 }
 
 function highlightOrbit(noradId) {
-    orbitLines.forEach((line, id) => {
-        if (id === noradId) {
-            const isStation = line.userData.source === 'stations';
-            line.material.color.setHex(isStation ? ORBIT_SEL_COLOR_STATION : ORBIT_SEL_COLOR_SAT);
-            line.material.opacity = ORBIT_SEL_OPACITY;
-            line.material.linewidth = 2;
-            line.renderOrder = 999;
-        } else {
-            line.material.color.setHex(line.userData.originalColor);
-            line.material.opacity = ORBIT_UNSEL_DIMMED_OPACITY;
-            line.material.linewidth = 1;
-            line.renderOrder = 0;
-        }
-    });
+    resetOrbitHighlights();
+    const line = orbitLines.get(noradId);
+    if (!line) return;
+    const isStation = line.userData.source === 'stations';
+    line.material.color.setHex(isStation ? ORBIT_SEL_COLOR_STATION : ORBIT_SEL_COLOR_SAT);
+    line.material.opacity = ORBIT_SEL_OPACITY;
+    line.material.linewidth = 2;
 }
 
 function resetOrbitHighlights() {
@@ -552,7 +539,6 @@ function resetOrbitHighlights() {
         line.material.color.setHex(line.userData.originalColor);
         line.material.opacity = line.userData.originalOpacity;
         line.material.linewidth = 1;
-        line.renderOrder = 0;
     });
 }
 
@@ -565,8 +551,8 @@ async function selectSat(noradId) {
     if (pos && !pos.error) {
         const v = ecefToThree(pos.x, pos.y, pos.z);
         if (!selectedMarker) {
-            const geo = new THREE.SphereGeometry(0.035, 20, 20);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffe600 });
+            const geo = new THREE.SphereGeometry(0.022, 16, 16);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
             selectedMarker = new THREE.Mesh(geo, mat);
             scene.add(selectedMarker);
         }
@@ -622,27 +608,54 @@ async function runScreening() {
 
     btn.disabled = true;
     btn.innerHTML = '⏳ Screening Catalog…';
-    statusEl.innerHTML = `Propagating candidate orbits over ${horizonHrs}h horizon (threshold: ${thresholdKm} km)…`;
+    statusEl.innerHTML = `⏳ Propagating candidate orbits over ${horizonHrs}h horizon (threshold: ${thresholdKm} km)…`;
+    listEl.innerHTML = '<div class="empty-state">Running screening…</div>';
 
     try {
         const horizonMin = horizonHrs * 60;
         const res = await fetch(`${API_BASE}/api/screen?threshold_km=${thresholdKm}&horizon_minutes=${horizonMin}&limit=${limit}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${res.status}`);
+        }
         const data = await res.json();
 
-        const alerts = data.alerts || [];
-        statusEl.innerHTML = `✅ Run Complete: Screened <strong>${data.total_pairs_screened || (limit * (limit - 1) / 2)}</strong> pairs. Found <strong>${alerts.length}</strong> close-approach alerts.`;
+        // Use alert_count from API (ALERT-status only), not alerts.length which
+        // previously included SAFE approaches and co-located suppressions.
+        const alertCount = data.alert_count ?? (data.alerts || []).length;
+        const colocSuppressed = data.colocated_pairs_suppressed || 0;
+        const pairsEval = data.pairs_evaluated || data.pairs_after_broad_phase || 0;
 
+        let statusMsg = `✅ Screened <strong>${data.objects_screened || limit}</strong> objects`;
+        statusMsg += `, <strong>${pairsEval}</strong> pairs evaluated`;
+        if (alertCount > 0) {
+            statusMsg += ` — <strong style="color:#ff4d6a;">${alertCount} ALERT${alertCount !== 1 ? 'S' : ''}</strong> found`;
+        } else {
+            statusMsg += ` — <strong style="color:#00e5a0;">No alerts</strong> within ${thresholdKm} km threshold`;
+        }
+        if (colocSuppressed > 0) {
+            statusMsg += ` <span style="color:var(--text-muted);font-size:10px;">(${colocSuppressed} co-located station-module pairs suppressed)</span>`;
+        }
+        statusEl.innerHTML = statusMsg;
+
+        const alerts = data.alerts || [];
         if (alerts.length === 0) {
-            listEl.innerHTML = '<div class="empty-state">No close approaches detected within threshold. Try increasing threshold km.</div>';
+            listEl.innerHTML = '<div class="empty-state">No close approaches detected within threshold. Try increasing threshold or horizon.</div>';
             return;
         }
 
         listEl.innerHTML = '';
         alerts.forEach((alert, idx) => {
-            const isCritical = alert.miss_distance_km < 10.0;
-            const badgeClass = isCritical ? 'alert-badge-critical' : 'alert-badge-warning';
-            const badgeText = isCritical ? 'CRITICAL' : 'WARNING';
+            // Use the API's screening_status field — never fabricate severity
+            // from miss distance alone (distance alone does not determine risk).
+            const isAlert = alert.screening_status === 'ALERT';
+            const badgeClass = isAlert ? 'alert-badge-critical' : 'alert-badge-warning';
+            const badgeText = isAlert ? 'ALERT' : alert.screening_status || 'WARNING';
+
+            // Display stale warnings in the card if applicable
+            const staleWarn = (alert.object_1_stale || alert.object_2_stale)
+                ? '<span style="color:#ffa64d;font-size:9px;">⚠ Stale TLE data</span>'
+                : '';
 
             const card = document.createElement('div');
             card.className = 'alert-card';
@@ -653,11 +666,12 @@ async function runScreening() {
                     <span class="alert-badge ${badgeClass}">${badgeText}</span>
                 </div>
                 <div class="alert-meta">
-                    <span>Miss Dist: <span class="alert-miss-distance">${alert.miss_distance_km.toFixed(2)} km</span></span>
-                    <span>Rel Speed: ${(alert.relative_speed_km_s || 0).toFixed(1)} km/s</span>
+                    <span>Miss Dist: <span class="alert-miss-distance">${alert.miss_distance_km != null ? alert.miss_distance_km.toFixed(3) + ' km' : '—'}</span></span>
+                    <span>Rel Speed: ${alert.relative_speed_km_s != null ? alert.relative_speed_km_s.toFixed(2) + ' km/s' : '—'}</span>
                 </div>
                 <div class="alert-meta" style="font-size:10px;">
-                    <span>TCA: ${alert.tca_utc ? alert.tca_utc.replace('T', ' ').substring(0, 19) : 'T+' + alert.tca_minutes_from_start.toFixed(1) + 'm'}</span>
+                    <span>TCA: ${alert.tca_utc ? alert.tca_utc.replace('T', ' ').substring(0, 19) + ' UTC' : 'T+' + (alert.tca_minutes_from_start || 0).toFixed(1) + 'm'}</span>
+                    ${staleWarn}
                     <span style="color:var(--accent);font-weight:600;">View in 3D ➔</span>
                 </div>
             `;
@@ -671,6 +685,7 @@ async function runScreening() {
 
     } catch (err) {
         statusEl.innerHTML = `❌ Screening error: ${err.message}`;
+        listEl.innerHTML = `<div class="empty-state" style="color:#ff4d6a;">Error: ${esc(err.message)}</div>`;
     } finally {
         btn.disabled = false;
         btn.innerHTML = '⚡ Run Collision Screening';
@@ -703,11 +718,36 @@ async function selectConjunction(alert) {
         line2.material.linewidth = 2;
     }
 
-    const pos1 = positions.find(p => p.norad_id === n1);
-    const pos2 = positions.find(p => p.norad_id === n2);
-
+    // Propagate both satellites to the TCA time to place encounter markers
+    // at the correct position in the orbit, not the current real-time position.
     conjunctionMarker = new THREE.Group();
-    if (pos1 && pos2 && !pos1.error && !pos2.error) {
+    let pos1 = null, pos2 = null;
+
+    if (alert.tca_utc) {
+        try {
+            const [r1, r2] = await Promise.all([
+                fetch(`${API_BASE}/api/propagate_one?norad_id=${n1}&ts=${encodeURIComponent(alert.tca_utc)}`).then(r => r.json()),
+                fetch(`${API_BASE}/api/propagate_one?norad_id=${n2}&ts=${encodeURIComponent(alert.tca_utc)}`).then(r => r.json()),
+            ]);
+            pos1 = r1.position;
+            pos2 = r2.position;
+        } catch (e) {
+            console.warn('TCA propagation failed, falling back to current positions:', e);
+            // Fallback: use current positions array if TCA propagation failed
+            const cp1 = positions.find(p => p.norad_id === n1);
+            const cp2 = positions.find(p => p.norad_id === n2);
+            if (cp1 && !cp1.error) pos1 = cp1;
+            if (cp2 && !cp2.error) pos2 = cp2;
+        }
+    } else {
+        // No TCA available — use current positions
+        const cp1 = positions.find(p => p.norad_id === n1);
+        const cp2 = positions.find(p => p.norad_id === n2);
+        if (cp1 && !cp1.error) pos1 = cp1;
+        if (cp2 && !cp2.error) pos2 = cp2;
+    }
+
+    if (pos1 && pos2) {
         const v1 = ecefToThree(pos1.x, pos1.y, pos1.z);
         const v2 = ecefToThree(pos2.x, pos2.y, pos2.z);
 
@@ -718,6 +758,21 @@ async function selectConjunction(alert) {
         sphere.position.copy(mid);
         conjunctionMarker.add(sphere);
 
+        // Satellite 1 marker (red dot)
+        const s1Geo = new THREE.SphereGeometry(0.018, 12, 12);
+        const s1Mat = new THREE.MeshBasicMaterial({ color: CONJUNCTION_COLOR_1, transparent: true, opacity: 0.9 });
+        const s1Mesh = new THREE.Mesh(s1Geo, s1Mat);
+        s1Mesh.position.copy(v1);
+        conjunctionMarker.add(s1Mesh);
+
+        // Satellite 2 marker (orange dot)
+        const s2Geo = new THREE.SphereGeometry(0.018, 12, 12);
+        const s2Mat = new THREE.MeshBasicMaterial({ color: CONJUNCTION_COLOR_2, transparent: true, opacity: 0.9 });
+        const s2Mesh = new THREE.Mesh(s2Geo, s2Mat);
+        s2Mesh.position.copy(v2);
+        conjunctionMarker.add(s2Mesh);
+
+        // Dashed connector line between the two TCA positions
         const lineGeo = new THREE.BufferGeometry().setFromPoints([v1, v2]);
         const lineMat = new THREE.LineDashedMaterial({ color: 0xff8598, dashSize: 0.02, gapSize: 0.01 });
         const connLine = new THREE.Line(lineGeo, lineMat);
@@ -1160,45 +1215,89 @@ function showConjunctionDetail(conj) {
     const panel = document.getElementById('detail-panel');
     if (!panel) return;
 
+    // ScreeningResult field names from the backend:
+    // norad_id_1, norad_id_2, name_1, name_2,
+    // miss_distance_km, relative_speed_km_s,
+    // tca_utc, tca_minutes_from_start, screening_status,
+    // object_1_stale, object_2_stale, notes, disclaimer
+    const n1 = conj.norad_id_1 ?? conj.sat1_id ?? '?';
+    const n2 = conj.norad_id_2 ?? conj.sat2_id ?? '?';
+    const name1 = esc(conj.name_1 || `NORAD ${n1}`);
+    const name2 = esc(conj.name_2 || `NORAD ${n2}`);
+    const missKm = conj.miss_distance_km ?? conj.min_distance_km;
+    const missStr = missKm != null ? missKm.toFixed(3) + ' km' : '—';
+    const relSpd = conj.relative_speed_km_s ?? null;
+    const relSpdStr = relSpd != null ? relSpd.toFixed(2) + ' km/s' : '—';
+    const tcaStr = conj.tca_utc
+        ? conj.tca_utc.replace('T', ' ').substring(0, 19) + ' UTC'
+        : (conj.tca_minutes_from_start != null
+            ? `T + ${conj.tca_minutes_from_start.toFixed(1)} min`
+            : conj.tca_iso || '—');
+    const tcaHrs = conj.tca_minutes_from_start != null
+        ? (conj.tca_minutes_from_start / 60)
+        : (conj.time_to_tca_hours ?? null);
+    const statusLabel = conj.screening_status || 'CONJUNCTION';
+    const statusColor = statusLabel === 'ALERT' ? '#ff4d6a' : '#ffa64d';
+
+    const staleNote = (conj.object_1_stale || conj.object_2_stale)
+        ? `<div style="color:#ffa64d;font-size:10px;margin-top:4px;">⚠ One or both satellites have stale TLE data. Accuracy may be degraded.</div>`
+        : '';
+    const notes = Array.isArray(conj.notes) && conj.notes.length
+        ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${conj.notes.map(n => esc(n)).join('<br>')}</div>`
+        : '';
+
     panel.classList.remove('hidden');
     panel.innerHTML = `
         <div class="detail-header">
             <div>
                 <div class="detail-title">Conjunction Encounter</div>
-                <div class="detail-subtitle">NORAD ${conj.sat1_id} vs NORAD ${conj.sat2_id}</div>
+                <div class="detail-subtitle">${name1} ↔ ${name2}</div>
             </div>
             <button class="close-btn" onclick="closeDetailPanel()">&times;</button>
         </div>
         <div class="telemetry-grid">
             <div class="telemetry-item">
-                <div class="telemetry-label">Screening Miss Dist</div>
-                <div class="telemetry-val" style="color:#ff4d6a;">${conj.min_distance_km.toFixed(2)} km</div>
+                <div class="telemetry-label">Miss Distance</div>
+                <div class="telemetry-val" style="color:#ff4d6a;">${missStr}</div>
             </div>
             <div class="telemetry-item">
-                <div class="telemetry-label">Time to TCA</div>
-                <div class="telemetry-val">${conj.time_to_tca_hours ? conj.time_to_tca_hours.toFixed(2) + ' hrs' : '-'}</div>
+                <div class="telemetry-label">Relative Speed</div>
+                <div class="telemetry-val">${relSpdStr}</div>
+            </div>
+            <div class="telemetry-item" style="grid-column:span 2;">
+                <div class="telemetry-label">TCA (Time of Closest Approach)</div>
+                <div class="telemetry-val" style="font-size:10px;">${tcaStr}</div>
             </div>
             <div class="telemetry-item">
-                <div class="telemetry-label">TCA Epoch</div>
-                <div class="telemetry-val" style="font-size:10px;">${conj.tca_iso || '-'}</div>
+                <div class="telemetry-label">NORAD 1</div>
+                <div class="telemetry-val">${n1}</div>
             </div>
             <div class="telemetry-item">
+                <div class="telemetry-label">NORAD 2</div>
+                <div class="telemetry-val">${n2}</div>
+            </div>
+            <div class="telemetry-item" style="grid-column:span 2;">
                 <div class="telemetry-label">Status</div>
-                <div class="telemetry-val"><span class="badge badge-critical">CONJUNCTION</span></div>
+                <div class="telemetry-val"><span class="badge badge-critical" style="background:${statusColor}">${statusLabel}</span></div>
             </div>
         </div>
+        ${staleNote}
+        ${notes}
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
-            <button class="action-btn btn-primary" style="font-size:11px;" onclick="runGridRefinement('${conj.sat1_id}', '${conj.sat2_id}')">
+            <button class="action-btn btn-primary" style="font-size:11px;" onclick="runGridRefinement('${n1}', '${n2}')">
                 Run 0.01m Nested Grid Refinement
             </button>
-            <button class="action-btn btn-secondary" style="font-size:11px;" onclick="switchMode('avoidance'); document.getElementById('avoid-norad-a').value='${conj.sat1_id}'; document.getElementById('avoid-norad-b').value='${conj.sat2_id}'; planAvoidanceManeuver('${conj.sat1_id}', '${conj.sat2_id}');">
+            <button class="action-btn btn-secondary" style="font-size:11px;" onclick="switchMode('avoidance'); document.getElementById('avoid-norad-a').value='${n1}'; document.getElementById('avoid-norad-b').value='${n2}'; planAvoidanceManeuver('${n1}', '${n2}');">
                 Plan Avoidance Maneuvers
             </button>
-            <button class="action-btn btn-secondary" style="font-size:11px;" onclick="switchMode('ml_risk'); populateMLFromConjunction('${conj.sat1_id}', '${conj.sat2_id}', ${conj.min_distance_km}, ${conj.time_to_tca_hours || 1.5});">
+            <button class="action-btn btn-secondary" style="font-size:11px;" onclick="switchMode('ml_risk'); populateMLFromConjunction('${n1}', '${n2}', ${missKm ?? 0}, ${tcaHrs != null ? tcaHrs.toFixed(4) : 1.5});">
                 Run ML Risk Assessment
             </button>
         </div>
-        <div id="refine-result-${conj.sat1_id}-${conj.sat2_id}" class="telemetry-grid" style="margin-top:12px;"></div>
+        <div id="grid-refine-result" class="telemetry-grid" style="margin-top:12px;"></div>
+        <div style="font-size:9px;color:var(--text-muted);margin-top:10px;line-height:1.4;">
+            ${esc(conj.disclaimer || 'SCREENING ALERT ONLY. Not a confirmed collision or calibrated probability.')}
+        </div>
     `;
 }
 
@@ -1316,7 +1415,7 @@ function setupUIListeners() {
     if (resetCamBtn) {
         resetCamBtn.addEventListener('click', () => {
             if (camera && controls) {
-                camera.position.set(0.6, 1.4, 4.2);
+                camera.position.set(0, 1.5, 3.2);
                 controls.target.set(0, 0, 0);
                 controls.update();
             }

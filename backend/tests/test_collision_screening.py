@@ -1,4 +1,4 @@
-﻿"""
+"""
 test_collision_screening.py  --  Akash Setu: Collision Screening Tests
 Run: cd <project_root> && python -m pytest backend/tests/test_collision_screening.py -v
 """
@@ -14,6 +14,7 @@ import pytest
 from collision_screening import (
     ScreeningConfig, _perigee_apogee, _altitude_bands_overlap,
     _epoch_to_jd, _jd_add_minutes, _vec_norm, screen_satellites,
+    _are_colocated,
 )
 
 SCREENING_DT = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
@@ -351,3 +352,142 @@ class TestT14Regression:
     def test_400_bad_timestamp(self):
         assert self.c.get("/api/propagate?ts=INVALID").status_code==400
 
+
+# ---- Test 15: Co-location detection ----
+# Verifies that objects sharing identical TLE sets (e.g. ISS docked modules)
+# are detected and suppressed, while independently-tracked objects are not.
+class TestT15Colocated:
+    """Co-location suppression tests."""
+
+    def _make_identical_pair(self, norad_a, norad_b):
+        """Two objects with same epoch and identical orbital elements (co-located)."""
+        EPOCH = "2025-01-01T00:00:00.000000"
+        from sgp4.api import Satrec, WGS72
+        from collision_screening import _sgp4_epoch_days, DEG2RAD, REVDAY2RADMIN
+        def build(nid):
+            sat = Satrec()
+            sat.sgp4init(WGS72, "i", nid, _sgp4_epoch_days(EPOCH),
+                         1e-5, 0.0, 0.0, 0.0001, 239.54*DEG2RAD,
+                         51.63*DEG2RAD, 120.49*DEG2RAD,
+                         15.4878*REVDAY2RADMIN, 96.95*DEG2RAD)
+            return sat
+        return (
+            {"norad_id": norad_a, "name": f"ISS-MOD-{norad_a}", "epoch": EPOCH,
+             "epoch_age_days": 1.0, "mean_motion": 15.4878, "eccentricity": 0.0001,
+             "satrec": build(norad_a), "init_error": None, "stale": False},
+            {"norad_id": norad_b, "name": f"ISS-MOD-{norad_b}", "epoch": EPOCH,
+             "epoch_age_days": 1.0, "mean_motion": 15.4878, "eccentricity": 0.0001,
+             "satrec": build(norad_b), "init_error": None, "stale": False},
+        )
+
+    def test_identical_elements_detected_as_colocated(self):
+        """_are_colocated returns True for objects with identical satrec elements."""
+        obj_a, obj_b = self._make_identical_pair(600, 601)
+        cfg = ScreeningConfig(suppress_colocated=True)
+        assert _are_colocated(obj_a, obj_b, cfg), (
+            "Objects with identical orbital elements and epoch should be flagged as co-located"
+        )
+
+    def test_different_epoch_not_colocated(self):
+        """Objects with different epochs (independent TLEs) are NOT co-located."""
+        EPOCH_A = "2025-01-01T00:00:00.000000"
+        EPOCH_B = "2025-01-02T00:00:00.000000"  # different epoch
+        from sgp4.api import Satrec, WGS72
+        from collision_screening import _sgp4_epoch_days, DEG2RAD, REVDAY2RADMIN
+        def build(nid, epoch):
+            sat = Satrec()
+            sat.sgp4init(WGS72, "i", nid, _sgp4_epoch_days(epoch),
+                         1e-5, 0.0, 0.0, 0.0001, 0.0, 51.6*DEG2RAD, 0.0,
+                         15.5*REVDAY2RADMIN, 0.0)
+            return sat
+        obj_a = {"norad_id": 610, "name": "A", "epoch": EPOCH_A, "satrec": build(610, EPOCH_A)}
+        obj_b = {"norad_id": 611, "name": "B", "epoch": EPOCH_B, "satrec": build(611, EPOCH_B)}
+        cfg = ScreeningConfig(suppress_colocated=True)
+        assert not _are_colocated(obj_a, obj_b, cfg), (
+            "Objects with different epochs must NOT be flagged as co-located"
+        )
+
+    def test_different_mean_anomaly_not_colocated(self):
+        """Objects with same epoch but different mean anomaly are independent (not co-located)."""
+        EPOCH = "2025-01-01T00:00:00.000000"
+        from sgp4.api import Satrec, WGS72
+        from collision_screening import _sgp4_epoch_days, DEG2RAD, REVDAY2RADMIN
+        def build(nid, ma_deg):
+            sat = Satrec()
+            sat.sgp4init(WGS72, "i", nid, _sgp4_epoch_days(EPOCH),
+                         1e-5, 0.0, 0.0, 0.0001, 0.0, 51.6*DEG2RAD, ma_deg*DEG2RAD,
+                         15.5*REVDAY2RADMIN, 0.0)
+            return sat
+        obj_a = {"norad_id": 620, "name": "A", "epoch": EPOCH, "satrec": build(620, 0.0)}
+        obj_b = {"norad_id": 621, "name": "B", "epoch": EPOCH, "satrec": build(621, 5.0)}  # 5° apart
+        cfg = ScreeningConfig(suppress_colocated=True)
+        assert not _are_colocated(obj_a, obj_b, cfg), (
+            "Objects with same epoch but different MA should NOT be co-located"
+        )
+
+    def test_suppress_colocated_false_does_not_suppress(self):
+        """When suppress_colocated=False, _are_colocated always returns False."""
+        obj_a, obj_b = self._make_identical_pair(630, 631)
+        cfg = ScreeningConfig(suppress_colocated=False)
+        assert not _are_colocated(obj_a, obj_b, cfg)
+
+    def test_colocated_pairs_not_reported_as_alerts(self):
+        """Co-located objects (same TLE set) must NOT appear in alerts as zero-distance hits."""
+        obj_a, obj_b = self._make_identical_pair(640, 641)
+        cfg = ScreeningConfig(
+            horizon_minutes=96, coarse_step_minutes=0.5,
+            screening_threshold_km=10.0, broad_phase_margin_km=200.0,
+            suppress_colocated=True,
+        )
+        run = screen_satellites([obj_a, obj_b], SCREENING_DT, cfg)
+        # The pair must be suppressed — no ALERT with near-zero miss distance
+        zero_dist_alerts = [
+            a for a in run.alerts
+            if a.screening_status == "ALERT" and a.miss_distance_km < 0.1
+        ]
+        assert len(zero_dist_alerts) == 0, (
+            f"Co-located pair produced false zero-distance ALERT: {zero_dist_alerts}"
+        )
+        assert run.colocated_pairs_suppressed >= 1
+        assert len(run.suppressed_colocated) >= 1
+
+    def test_legitimate_close_approach_not_suppressed(self):
+        """Legitimate close approaches between independent objects are still reported."""
+        # Two ISS-like satellites on same plane but different MA — they will converge
+        rec_a = _internal(650, "LEO-A", ma_deg=0.0, ea=1.0)
+        rec_b = _internal(651, "LEO-B", ma_deg=0.1, ea=1.0)
+        cfg = ScreeningConfig(
+            horizon_minutes=170, coarse_step_minutes=0.5,
+            screening_threshold_km=15.0, broad_phase_margin_km=200.0,
+            suppress_colocated=True, refinement_steps=20,
+        )
+        run = screen_satellites([rec_a, rec_b], SCREENING_DT, cfg)
+        assert run.colocated_pairs_suppressed == 0, (
+            "Independent objects with different epochs should not be suppressed"
+        )
+        assert len(run.alerts) >= 1, "Legitimate close approach must still produce an alert"
+
+    def test_api_reports_colocated_suppressed_count(self):
+        """The /api/screen endpoint reports colocated_pairs_suppressed in the response."""
+        import app as fa
+        obj_a, obj_b = self._make_identical_pair(660, 661)
+        fa.SATELLITES = {
+            660: {**obj_a, "intl_desig": "", "inclination": 51.63, "period_min": 92.9,
+                  "source": "stations", "priority": 10},
+            661: {**obj_b, "intl_desig": "", "inclination": 51.63, "period_min": 92.9,
+                  "source": "stations", "priority": 10},
+        }
+        fa._last_screening_run = None
+        c = fa.app.test_client()
+        r = c.get("/api/screen?horizon_minutes=30&threshold_km=5.0")
+        assert r.status_code == 200
+        d = r.get_json()
+        assert "colocated_pairs_suppressed" in d, "API response missing colocated_pairs_suppressed"
+        assert "suppressed_colocated" in d, "API response missing suppressed_colocated"
+        assert d["colocated_pairs_suppressed"] >= 1
+        assert isinstance(d["suppressed_colocated"], list) and len(d["suppressed_colocated"]) >= 1
+        # No ALERT with zero miss distance
+        for alert in d.get("alerts", []):
+            assert alert.get("miss_distance_km", 999) >= 0.01, (
+                f"Unexpected near-zero miss distance alert: {alert}"
+            )

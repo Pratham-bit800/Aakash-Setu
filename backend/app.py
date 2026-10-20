@@ -564,23 +564,26 @@ def screen():
         return d
 
     return jsonify({
-        "run_id":                   run.run_id,
-        "screening_epoch":          run.screening_epoch,
-        "horizon_minutes":          run.horizon_minutes,
-        "coarse_step_minutes":      run.coarse_step_minutes,
-        "screening_threshold_km":   run.screening_threshold_km,
-        "total_objects_input":      run.total_objects_input,
-        "objects_screened":         run.objects_screened,
-        "objects_skipped":          run.objects_skipped,
-        "total_pairs_possible":     run.total_pairs_possible,
-        "pairs_after_broad_phase":  run.pairs_after_broad_phase,
-        "pairs_evaluated":          run.pairs_evaluated,
-        "alert_count":              sum(1 for a in run.alerts if a.screening_status == "ALERT"),
-        "alerts":                   [_serialise_result(a) for a in run.alerts],
-        "skipped":                  run.skipped,
-        "runtime_seconds":          run.runtime_seconds,
-        "config":                   run.config,
-        "disclaimer":               run.disclaimer,
+        "run_id":                        run.run_id,
+        "screening_epoch":               run.screening_epoch,
+        "horizon_minutes":               run.horizon_minutes,
+        "coarse_step_minutes":           run.coarse_step_minutes,
+        "screening_threshold_km":        run.screening_threshold_km,
+        "total_objects_input":           run.total_objects_input,
+        "objects_screened":              run.objects_screened,
+        "objects_skipped":               run.objects_skipped,
+        "total_pairs_possible":          run.total_pairs_possible,
+        "pairs_after_broad_phase":       run.pairs_after_broad_phase,
+        "pairs_evaluated":               run.pairs_evaluated,
+        "colocated_pairs_suppressed":    run.colocated_pairs_suppressed,
+        "alert_count":                   sum(1 for a in run.alerts if a.screening_status == "ALERT"),
+        "alerts":                        [_serialise_result(a) for a in run.alerts if a.screening_status == "ALERT"],
+        "safe_approaches":               sum(1 for a in run.alerts if a.screening_status != "ALERT"),
+        "skipped":                       run.skipped,
+        "suppressed_colocated":          run.suppressed_colocated,
+        "runtime_seconds":               run.runtime_seconds,
+        "config":                        run.config,
+        "disclaimer":                    run.disclaimer,
     })
 
 
@@ -609,14 +612,16 @@ def screen_results():
         return d
 
     return jsonify({
-        "run_id":                   run.run_id,
-        "screening_epoch":          run.screening_epoch,
-        "alert_count":              sum(1 for a in run.alerts if a.screening_status == "ALERT"),
-        "alerts":                   [_serialise_result(a) for a in run.alerts],
-        "skipped":                  run.skipped,
-        "runtime_seconds":          run.runtime_seconds,
-        "config":                   run.config,
-        "disclaimer":               run.disclaimer,
+        "run_id":                        run.run_id,
+        "screening_epoch":               run.screening_epoch,
+        "alert_count":                   sum(1 for a in run.alerts if a.screening_status == "ALERT"),
+        "alerts":                        [_serialise_result(a) for a in run.alerts if a.screening_status == "ALERT"],
+        "colocated_pairs_suppressed":    run.colocated_pairs_suppressed,
+        "suppressed_colocated":          run.suppressed_colocated,
+        "skipped":                       run.skipped,
+        "runtime_seconds":               run.runtime_seconds,
+        "config":                        run.config,
+        "disclaimer":                    run.disclaimer,
     })
 
 

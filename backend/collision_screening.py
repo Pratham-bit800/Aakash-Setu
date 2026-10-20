@@ -1,4 +1,4 @@
-﻿"""
+"""
 collision_screening.py -- Akash Setu: Collision Screening Engine
 =========================================================================
 Screens candidate satellite pairs for close approaches over a configurable
@@ -76,6 +76,9 @@ class ScreeningConfig:
     stale_epoch_days: float = 14.0       # Days after which TLE is considered stale
     max_pairs: int = 500_000             # Safety cap on candidate pairs
     threshold_comparison: str = "lt"     # "lt" (< threshold) or "lte" (<= threshold)
+    suppress_colocated: bool = True      # Suppress co-located object pairs (same TLE)
+    colocated_mm_tol: float = 1e-4      # Mean-motion tolerance (rev/day) for co-location
+    colocated_angle_tol_deg: float = 0.01  # Angular element tolerance (deg) for co-location
 
     def alert_triggered(self, distance_km: float) -> bool:
         """Return True if distance triggers an alert per the configured rule."""
@@ -147,8 +150,10 @@ class ScreeningRun:
     total_pairs_possible: int
     pairs_after_broad_phase: int
     pairs_evaluated: int
-    alerts: list                  # list of ScreeningResult
-    skipped: list                 # list of {norad_id, reason}
+    colocated_pairs_suppressed: int       # co-located same-complex pairs excluded
+    alerts: list                          # list of ScreeningResult
+    skipped: list                         # list of {norad_id, reason}
+    suppressed_colocated: list            # list of suppressed co-located pairs
     runtime_seconds: float
     config: dict
     disclaimer: str = (
@@ -252,6 +257,73 @@ def _altitude_bands_overlap(perigee1, apogee1, perigee2, apogee2, margin_km: flo
     lo1, hi1 = perigee1 - margin_km, apogee1 + margin_km
     lo2, hi2 = perigee2 - margin_km, apogee2 + margin_km
     return hi1 >= lo2 and hi2 >= lo1
+
+
+def _are_colocated(obj_a: dict, obj_b: dict, config: 'ScreeningConfig') -> bool:
+    """
+    Return True when two objects share essentially identical orbital elements,
+    indicating they are docked modules of the same complex (e.g. ISS + Progress,
+    Tiangong + Shenzhou) whose TLEs are published with duplicate element sets.
+
+    Detection criteria (all must be met):
+      - Same epoch string (identical epoch ⇒ same TLE source)
+      - Mean-motion within colocated_mm_tol rev/day
+      - Inclination, RAAN, AOP, MA within colocated_angle_tol_deg
+      - Eccentricity within 1e-5
+
+    This deliberately uses tight tolerances so that independently-tracked
+    objects at similar altitudes (e.g. two ISS-altitude debris pieces with
+    different epochs) are NOT suppressed.
+    """
+    if not config.suppress_colocated:
+        return False
+
+    # Epoch must be identical (same TLE batch)
+    epoch_a = obj_a.get("epoch", "")
+    epoch_b = obj_b.get("epoch", "")
+    if not epoch_a or epoch_a != epoch_b:
+        return False
+
+    # Extract orbital elements from satrec (most reliable source)
+    # satrec stores: no_kozai (rad/min), inclo (rad), nodeo (rad), argpo (rad),
+    # mo (rad), ecco (dimensionless)
+    try:
+        sa = obj_a["satrec"]
+        sb = obj_b["satrec"]
+        RAD2DEG = 180.0 / math.pi
+        MIN2DAY  = 1440.0 / (2.0 * math.pi)  # rad/min → rev/day
+
+        mm_a   = sa.no_kozai * MIN2DAY
+        mm_b   = sb.no_kozai * MIN2DAY
+        inc_a  = sa.inclo  * RAD2DEG
+        inc_b  = sb.inclo  * RAD2DEG
+        raan_a = sa.nodeo  * RAD2DEG
+        raan_b = sb.nodeo  * RAD2DEG
+        aop_a  = sa.argpo  * RAD2DEG
+        aop_b  = sb.argpo  * RAD2DEG
+        ma_a   = sa.mo     * RAD2DEG
+        ma_b   = sb.mo     * RAD2DEG
+        ecc_a  = sa.ecco
+        ecc_b  = sb.ecco
+    except AttributeError:
+        return False
+
+    mm_tol  = config.colocated_mm_tol
+    ang_tol = config.colocated_angle_tol_deg
+
+    # Angle difference accounting for 0/360 wrap
+    def _ang_diff(a, b):
+        d = abs(a - b) % 360.0
+        return d if d <= 180.0 else 360.0 - d
+
+    return (
+        abs(mm_a - mm_b)          <= mm_tol
+        and _ang_diff(inc_a, inc_b)  <= ang_tol
+        and _ang_diff(raan_a, raan_b) <= ang_tol
+        and _ang_diff(aop_a, aop_b)  <= ang_tol
+        and _ang_diff(ma_a, ma_b)    <= ang_tol
+        and abs(ecc_a - ecc_b)       <= 1e-5
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -416,11 +488,28 @@ def screen_satellites(
 
     # -----------------------------------------------------------------------
     # 2. Broad-phase filter: altitude band overlap
+    #    Also suppress co-located pairs (docked modules sharing identical TLEs)
     # -----------------------------------------------------------------------
     candidate_pairs: list[tuple] = []
+    suppressed_colocated: list[dict] = []
+
     for i in range(n):
         for j in range(i + 1, n):
             a, b = objects[i], objects[j]
+
+            # Co-location check: suppress before altitude filter (cheaper)
+            if _are_colocated(a, b, config):
+                suppressed_colocated.append({
+                    "norad_id_1": a["norad_id"], "name_1": a["name"],
+                    "norad_id_2": b["norad_id"], "name_2": b["name"],
+                    "reason": (
+                        "Co-located objects share identical orbital elements and epoch. "
+                        "These are likely docked modules of the same space station complex. "
+                        "Suppressed to prevent false zero-distance alerts."
+                    ),
+                })
+                continue
+
             if _altitude_bands_overlap(
                 a["perigee_km"], a["apogee_km"],
                 b["perigee_km"], b["apogee_km"],
@@ -606,8 +695,10 @@ def screen_satellites(
         total_pairs_possible=total_pairs,
         pairs_after_broad_phase=len(candidate_pairs),
         pairs_evaluated=len(close_windows),
+        colocated_pairs_suppressed=len(suppressed_colocated),
         alerts=alerts,
         skipped=skipped,
+        suppressed_colocated=suppressed_colocated,
         runtime_seconds=round(t_end - t_start, 3),
         config={
             "horizon_minutes": config.horizon_minutes,
@@ -617,5 +708,6 @@ def screen_satellites(
             "refinement_steps": config.refinement_steps,
             "stale_epoch_days": config.stale_epoch_days,
             "threshold_comparison": config.threshold_comparison,
+            "suppress_colocated": config.suppress_colocated,
         },
     )
